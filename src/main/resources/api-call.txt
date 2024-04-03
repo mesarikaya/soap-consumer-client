@@ -1,3 +1,26 @@
 curl --location 'http://localhost:8081/api/v1/countries' \
 --header 'Content-Type: text/plain' \
 --data 'The Netherlands'
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.remoting.jaxws.JaxWsPortProxyFactoryBean;
+
+import javax.xml.namespace.QName;
+
+@Configuration
+public class SoapClientConfig {
+
+    @Bean
+    public JaxWsPortProxyFactoryBean mySoapService() {
+        JaxWsPortProxyFactoryBean factoryBean = new JaxWsPortProxyFactoryBean();
+        factoryBean.setWsdlDocumentUrl("http://example.com/your-service?wsdl");
+        factoryBean.setServiceName(new QName("http://example.com/your-service", "YourServiceName"));
+        factoryBean.setPortName(new QName("http://example.com/your-service", "YourPortName"));
+        factoryBean.setServiceInterface(YourServiceInterface.class);
+        factoryBean.setUsername("username");
+        factoryBean.setPassword("password");
+        return factoryBean;
+    }
+}
+
