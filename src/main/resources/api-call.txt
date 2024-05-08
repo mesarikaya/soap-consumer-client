@@ -24,3 +24,62 @@ public class SoapClientConfig {
     }
 }
 
+
+
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.example</groupId>
+    <artifactId>your-project</artifactId>
+    <version>1.0.0</version>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
+    </properties>
+
+    <dependencies>
+        <!-- Add any dependencies your project requires -->
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Configure the JAX-WS Maven Plugin -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>jaxws-maven-plugin</artifactId>
+                <version>3.0.0</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>wsimport</goal>
+                        </goals>
+                        <configuration>
+                            <!-- Specify the location of your WSDL file -->
+                            <wsdlFiles>
+                                <wsdlFile>src/main/resources/wsdl/walk_location.wsdl</wsdlFile>
+                            </wsdlFiles>
+                            <!-- Specify the package name for generated classes -->
+                            <packageName>com.example.generated</packageName>
+                            <!-- Other configuration options as needed -->
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+
+        <resources>
+            <!-- Include WSDL files in the packaged JAR -->
+            <resource>
+                <directory>src/main/resources</directory>
+                <includes>
+                    <include>wsdl/**</include>
+                </includes>
+            </resource>
+        </resources>
+    </build>
+</project>
+
+
