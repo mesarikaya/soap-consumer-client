@@ -213,3 +213,49 @@ public class CustomHandler implements Handler<SOAPMessageContext> {
     // Implement methods to check for and add client certificates as needed
 }
 
+
+
+
+
+import javax.xml.ws.BindingProvider;
+import java.util.Map;
+
+public class CustomHTTPInterceptor {
+
+    public void interceptOutgoingRequest(BindingProvider bindingProvider) {
+        // Access the request context
+        Map<String, Object> requestContext = bindingProvider.getRequestContext();
+
+        // Check if the necessary SSL/TLS headers are present
+        if (requestContext.containsKey("javax.net.ssl.keyStore") && requestContext.containsKey("javax.net.ssl.trustStore")) {
+            System.out.println("Certificates added to outgoing request headers.");
+        } else {
+            System.out.println("Certificates not found in outgoing request headers.");
+        }
+    }
+}
+
+
+
+
+
+public class SoapClient {
+
+    public static void main(String[] args) {
+        // Create service instance
+        YourSoapService service = new YourSoapService();
+        YourSoapServicePortType port = service.getYourSoapServicePort();
+
+        // Get BindingProvider
+        BindingProvider bindingProvider = (BindingProvider) port;
+
+        // Use the custom HTTP interceptor to inspect outgoing requests
+        CustomHTTPInterceptor interceptor = new CustomHTTPInterceptor();
+        interceptor.interceptOutgoingRequest(bindingProvider);
+
+        // Make SOAP call
+        // ...
+    }
+}
+
+
