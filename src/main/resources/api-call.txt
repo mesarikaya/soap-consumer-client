@@ -174,3 +174,5 @@ public class SoapClientUnitTest {
 
 https://stackoverflow.com/questions/11001102/how-to-programmatically-set-the-sslcontext-of-a-jax-ws-client
 
+https://erikwramner.wordpress.com/2013/03/27/trust-self-signed-ssl-certificates-and-skip-host-name-verification-with-jax-ws/
+
