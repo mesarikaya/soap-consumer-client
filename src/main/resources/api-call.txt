@@ -176,3 +176,40 @@ https://stackoverflow.com/questions/11001102/how-to-programmatically-set-the-ssl
 
 https://erikwramner.wordpress.com/2013/03/27/trust-self-signed-ssl-certificates-and-skip-host-name-verification-with-jax-ws/
 
+
+
+
+
+
+import javax.xml.ws.handler.Handler;
+import javax.xml.ws.handler.MessageContext;
+import java.util.Set;
+
+public class CustomHandler implements Handler<SOAPMessageContext> {
+
+    @Override
+    public boolean handleMessage(SOAPMessageContext context) {
+        // Check if this is an outbound message
+        boolean outbound = (Boolean) context.get(MessageContext.MESSAGE_OUTBOUND_PROPERTY);
+        if (outbound) {
+            // Access the BindingProvider from the SOAPMessageContext
+            BindingProvider bindingProvider = (BindingProvider) context.get(BindingProvider.class.getName());
+            
+            // Access the SSL context from the BindingProvider
+            SSLContext sslContext = (SSLContext) bindingProvider.getRequestContext().get("com.sun.xml.internal.ws.transport.https.client.SSLSocketFactory");
+            
+            // Check if the SSL context contains client certificates
+            // If not, add client certificates to the SSL context
+            // Implement the logic to add client certificates if necessary
+            
+            // Example:
+            // if (sslContext != null && !containsClientCertificates(sslContext)) {
+            //    addClientCertificates(sslContext);
+            // }
+        }
+        return true;
+    }
+
+    // Implement methods to check for and add client certificates as needed
+}
+
