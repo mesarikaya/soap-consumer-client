@@ -139,4 +139,37 @@ public class SoapClientConfig {
 
 https://stackoverflow.com/questions/9802487/controlling-jax-ws-wsdllocation-attribute-values-absolute-path-with-jaxws-mav
 
+logging:
+  level:
+    javax.net.ssl: DEBUG
+
+import javax.xml.ws.BindingProvider;
+import javax.xml.ws.Service;
+import javax.net.ssl.HttpsURLConnection;
+import java.net.URL;
+import java.security.cert.Certificate;
+
+public class SoapClientUnitTest {
+
+    @Test
+    void testClientCertificates() throws Exception {
+        // Create service instance
+        Service service = new YourSoapService();
+        YourSoapServicePortType port = service.getYourSoapServicePort();
+
+        // Get BindingProvider
+        BindingProvider bindingProvider = (BindingProvider) port;
+
+        // Get URL connection
+        URL url = new URL((String) bindingProvider.getRequestContext().get(BindingProvider.ENDPOINT_ADDRESS_PROPERTY));
+        HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
+
+        // Get server certificates
+        Certificate[] serverCertificates = connection.getServerCertificates();
+
+        // Assertions
+        // Add assertions to verify that the server certificates include the expected certificate authorities or other properties
+    }
+}
+
 
