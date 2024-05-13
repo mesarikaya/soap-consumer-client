@@ -258,4 +258,5 @@ public class SoapClient {
     }
 }
 
+https://stackoverflow.com/questions/7109251/how-can-i-make-spring-webservices-log-all-soap-requests
 
