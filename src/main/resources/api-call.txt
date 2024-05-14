@@ -260,3 +260,67 @@ public class SoapClient {
 
 https://stackoverflow.com/questions/7109251/how-can-i-make-spring-webservices-log-all-soap-requests
 
+public class Main {
+    public static void main(String[] args) {
+        String xmlCreateResponseMessage = "<createresponsemessage><id>123</id><message>Hello, world!</message></createresponsemessage>";
+        String xmlDelivery = "<delivery><status>delivered</status><timestamp>2024-05-14T10:00:00</timestamp></delivery>";
+
+        try {
+            // Deserialize XML into Java objects using the appropriate method
+            CreateResponseMessage createResponseMessage = XMLDeserializer.deserializeCreateResponseMessage(xmlCreateResponseMessage);
+            Delivery delivery = null;
+
+            if (createResponseMessage == null) {
+                delivery = XMLDeserializer.deserializeDelivery(xmlDelivery);
+            }
+
+            // Check if either deserialization was successful and make the method call
+            if (createResponseMessage != null) {
+                makeMethodCall(createResponseMessage);
+            } else if (delivery != null) {
+                makeMethodCall(delivery);
+            } else {
+                System.err.println("Both deserialization attempts failed.");
+            }
+        } catch (JAXBException e) {
+            System.err.println("Error deserializing XML: " + e.getMessage());
+        }
+    }
+
+    // Method for making the call with CreateResponseMessage object
+    private static void makeMethodCall(CreateResponseMessage createResponseMessage) {
+        System.out.println("Method call with CreateResponseMessage: " + createResponseMessage.getId() + ", " + createResponseMessage.getMessage());
+    }
+
+    // Method for making the call with Delivery object
+    private static void makeMethodCall(Delivery delivery) {
+        System.out.println("Method call with Delivery: " + delivery.getStatus() + ", " + delivery.getTimestamp());
+    }
+}
+
+import javax.xml.bind.JAXBContext;
+import javax.xml.bind.JAXBException;
+import javax.xml.bind.Unmarshaller;
+import java.io.StringReader;
+
+public class XMLDeserializer {
+    public static CreateResponseMessage deserializeCreateResponseMessage(String xml) throws JAXBException {
+        try {
+            JAXBContext context = JAXBContext.newInstance(CreateResponseMessage.class);
+            Unmarshaller unmarshaller = context.createUnmarshaller();
+            return (CreateResponseMessage) unmarshaller.unmarshal(new StringReader(xml));
+        } catch (JAXBException e) {
+            throw new JAXBException("Error deserializing CreateResponseMessage: " + e.getMessage());
+        }
+    }
+
+    public static Delivery deserializeDelivery(String xml) throws JAXBException {
+        try {
+            JAXBContext context = JAXBContext.newInstance(Delivery.class);
+            Unmarshaller unmarshaller = context.createUnmarshaller();
+            return (Delivery) unmarshaller.unmarshal(new StringReader(xml));
+        } catch (JAXBException e) {
+            throw new JAXBException("Error deserializing Delivery: " + e.getMessage());
+        }
+    }
+}
