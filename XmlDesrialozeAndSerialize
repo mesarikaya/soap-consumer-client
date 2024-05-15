@@ -1,0 +1,66 @@
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.util.FileCopyUtils;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+
+public class XmlFileReader {
+
+    public String readXmlFile(String filePath) throws IOException {
+        ClassPathResource resource = new ClassPathResource(filePath);
+        try (InputStream inputStream = resource.getInputStream()) {
+            byte[] bytes = FileCopyUtils.copyToByteArray(inputStream);
+            return new String(bytes, StandardCharsets.UTF_8);
+        }
+    }
+
+    public static void main(String[] args) {
+        XmlFileReader xmlFileReader = new XmlFileReader();
+        try {
+            String xmlContent = xmlFileReader.readXmlFile("your/xml/file/path.xml");
+            System.out.println(xmlContent);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+import javax.xml.bind.*;
+import java.io.StringReader;
+
+public class XmlToObjectConverter {
+    public YourRootElement unmarshalXmlString(String xmlString) throws JAXBException {
+        JAXBContext jaxbContext = JAXBContext.newInstance(YourRootElement.class);
+        Unmarshaller unmarshaller = jaxbContext.createUnmarshaller();
+        return (YourRootElement) unmarshaller.unmarshal(new StringReader(xmlString));
+    }
+}
+
+public class Main {
+    public static void main(String[] args) {
+        String xmlContent = ""; // Your XML string
+        XmlToObjectConverter converter = new XmlToObjectConverter();
+        try {
+            YourRootElement rootElement = converter.unmarshalXmlString(xmlContent);
+            YourElement yourElement = rootElement.getYourElement();
+            // Now you can use your Java object
+        } catch (JAXBException e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+import javax.xml.bind.*;
+import java.io.StringWriter;
+
+public class ObjectToXmlConverter {
+    public String marshalObjectToXml(YourRootElement rootElement) throws JAXBException {
+        JAXBContext jaxbContext = JAXBContext.newInstance(YourRootElement.class);
+        Marshaller marshaller = jaxbContext.createMarshaller();
+        marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, true); // Optional: Pretty print XML
+        StringWriter stringWriter = new StringWriter();
+        marshaller.marshal(rootElement, stringWriter);
+        return stringWriter.toString();
+    }
+}
