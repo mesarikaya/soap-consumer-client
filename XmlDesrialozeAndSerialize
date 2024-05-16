@@ -82,3 +82,5 @@ Here are a few steps you can take to troubleshoot this:
 6. **Check IntelliJ's Maven Settings**: Ensure that IntelliJ is using the same Maven settings and repositories as your command-line environment. Sometimes, there can be discrepancies between the two which lead to different build outcomes.
 
 By following these steps, you should be able to identify and resolve the dependency conflicts between ServiceA and ServiceB. Let me know if you need further assistance!
+
+mvn dependency:tree -Dverbose
