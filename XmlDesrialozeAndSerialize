@@ -84,3 +84,5 @@ Here are a few steps you can take to troubleshoot this:
 By following these steps, you should be able to identify and resolve the dependency conflicts between ServiceA and ServiceB. Let me know if you need further assistance!
 
 mvn dependency:tree -Dverbose
+
+https://www.baeldung.com/maven-version-collision
