@@ -1,0 +1,104 @@
+Got it. Here's how you can create a separate module for specific subpackages from your first application and then use that module in another application:
+
+### Step 1: Create a New Module for Subpackages
+
+1. **Create a New Module**
+
+Create a new module within your existing Maven project. Let's call it `common-module`.
+
+```bash
+mkdir common-module
+cd common-module
+```
+
+2. **Update `pom.xml`**
+
+In the `pom.xml` of the `common-module`, include only the dependencies and configurations relevant to the subpackages you want to include.
+
+For example:
+
+```xml
+<project xmlns="http://maven.apache.org/POM/4.0.0" ...>
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>common-module</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+
+    <dependencies>
+        <!-- Add dependencies relevant to the subpackages -->
+        <dependency>
+            <!-- Example dependency -->
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-core</artifactId>
+            <version>5.3.9</version>
+        </dependency>
+    </dependencies>
+</project>
+```
+
+3. **Add Subpackages**
+
+Place the subpackages (`xml` and `messaging` in your case) from your first application into the appropriate directory structure within the `common-module`.
+
+For example:
+
+```
+common-module/
+└── src
+    └── main
+        └── java
+            └── com
+                └── example
+                    ├── xml
+                    │   └── XmlService.java
+                    └── messaging
+                        └── MessagingService.java
+```
+
+### Step 2: Use the Common Module in Another Application
+
+1. **Update the Second Application's `pom.xml`**
+
+In the `pom.xml` of your second application, add a dependency on the `common-module`.
+
+```xml
+<dependency>
+    <groupId>com.example</groupId>
+    <artifactId>common-module</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
+
+2. **Use Classes from the Common Module**
+
+You can now use classes from the `common-module` in your second application just like any other dependency.
+
+For example:
+
+```java
+package com.example.secondapp.service;
+
+import com.example.xml.XmlService;
+import com.example.messaging.MessagingService;
+
+public class SomeService {
+
+    private final XmlService xmlService;
+    private final MessagingService messagingService;
+
+    public SomeService(XmlService xmlService, MessagingService messagingService) {
+        this.xmlService = xmlService;
+        this.messagingService = messagingService;
+    }
+
+    public void performService() {
+        xmlService.doSomething();
+        messagingService.sendMessage();
+    }
+}
+```
+
+### Summary
+
+By creating a separate module for specific subpackages from your first application, you can encapsulate and reuse that functionality in other applications without the hassle of classifiers. This approach helps maintain a clean and modular project structure.
