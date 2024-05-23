@@ -1,0 +1,66 @@
+<profiles>
+    <!-- Default Profile -->
+    <profile>
+        <id>default</id>
+        <activation>
+            <activeByDefault>true</activeByDefault>
+        </activation>
+        <build>
+            <resources>
+                <resource>
+                    <directory>src/main/resources</directory>
+                    <includes>
+                        <include>**/*</include>
+                    </includes>
+                </resource>
+            </resources>
+        </build>
+    </profile>
+
+    <!-- Docker Profile -->
+    <profile>
+        <id>docker</id>
+        <build>
+            <resources>
+                <resource>
+                    <directory>src/main/resources</directory>
+                    <excludes>
+                        <exclude>**/excluded-for-docker.txt</exclude>
+                    </excludes>
+                </resource>
+            </resources>
+        </build>
+    </profile>
+
+    <!-- Development Profile -->
+    <profile>
+        <id>development</id>
+        <build>
+            <resources>
+                <resource>
+                    <directory>src/main/resources</directory>
+                    <includes>
+                        <include>**/included-for-development.txt</include>
+                    </includes>
+                </resource>
+            </resources>
+        </build>
+    </profile>
+
+    <!-- Production Profile -->
+    <profile>
+        <id>production</id>
+        <build>
+            <resources>
+                <resource>
+                    <directory>src/main/resources</directory>
+                    <excludes>
+                        <exclude>**/excluded-for-production.txt</exclude>
+                    </excludes>
+                </resource>
+            </resources>
+        </build>
+    </profile>
+</profiles>
+
+mvn clean package -Pdevelopment
