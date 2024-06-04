@@ -1,0 +1,139 @@
+The error "PKIX path building failed" and "unable to find valid certification path to requested target" typically occurs when your Spring Boot application is attempting to make an HTTPS request to a server, but the server's SSL certificate is not trusted by the Java runtime (JVM). This can happen if the server's certificate is self-signed or signed by a certificate authority (CA) that is not trusted by the JVM's truststore.Here's a step-by-step approach to resolve this issue:1. Identify the Certificate ChainFirst, determine the certificate chain used by the target server. You can do this by using tools like OpenSSL or your browser.Using OpenSSLopenssl s_client -connect <your-soap-service-url>:443 -showcerts2. Import the Certificate into Java's TruststoreExtract the CertificateSave the certificate chain to a file, for example, server-cert.pem.Convert the CertificateConvert the PEM file to a format Java can use:openssl x509 -outform der -in server-cert.pem -out server-cert.derImport the CertificateImport the certificate into the JVM's truststore using the keytool utility:keytool -import -alias youralias -keystore <path-to-your-java-home>/lib/security/cacerts -file server-cert.derThe default password for the JVM's truststore is changeit.3. Configure Docker to Use the Custom TruststoreCreate a Custom TruststoreAlternatively, create a custom truststore and configure your Spring Boot application to use it.Create a new truststore:keytool -import -alias youralias -keystore custom-truststore.jks -file server-cert.derAdd the custom truststore to your Docker image. You can add the truststore file to your Docker image and configure your Spring Boot application to use it by setting JVM options.Update DockerfileFROM openjdk:11-jre-slim
+
+# Add your custom truststore
+COPY custom-truststore.jks /path/to/custom-truststore.jks
+
+# Set the JVM options to use the custom truststore
+ENV JAVA_OPTS="-Djavax.net.ssl.trustStore=/path/to/custom-truststore.jks -Djavax.net.ssl.trustStorePassword=yourpassword"
+
+# Add your Spring Boot application jar
+COPY your-application.jar /app/your-application.jar
+
+ENTRYPOINT ["java", "-jar", "/app/your-application.jar"]Update docker-compose.ymlEnsure your docker-compose.yml file uses the updated Dockerfile:version: '3.8'
+services:
+  your-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - JAVA_OPTS4. Alternative: Disable SSL Verification (Not Recommended for Production)If this is just for testing purposes and security is not a concern, you can disable SSL verification in your Spring Boot application, though this is not recommended for production environments.Add a RestTemplate Bean with Disabled SSL Verificationimport org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
+import org.springframework.web.client.RestTemplate;
+
+import javax.net.ssl.*;
+import java.security.cert.X509Certificate;
+
+@Configuration
+public class AppConfig {
+
+    @Bean
+    public RestTemplate restTemplate() throws Exception {
+        TrustManager[] trustAllCerts = new TrustManager[]{
+            new X509TrustManager() {
+                public X509Certificate[] getAcceptedIssuers() {
+                    return null;
+                }
+
+                public void checkClientTrusted(X509Certificate[] certs, String authType) {
+                }
+
+                public void checkServerTrusted(X509Certificate[] certs, String authType) {
+                }
+            }
+        };
+
+        SSLContext sslContext = SSLContext.getInstance("TLS");
+        sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
+
+        HttpsURLConnection.setDefaultSSLSocketFactory(sslContext.getSocketFactory());
+
+        HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory();
+        factory.setHttpClient(HttpClientBuilder.create().setSslcontext(sslContext).build());
+
+        return new RestTemplate(factory);
+    }
+}
+SummaryImport the server's SSL certificate into the JVM's truststore.Configure your Docker image to use the custom truststore.(Optional) Disable SSL verification for non-production environments.This should help resolve the SSL certificate validation issues you're experiencing.
+-------_---------
+Yes, you can directly set the Java options in your `docker-compose.yml` file. This approach ensures that the custom truststore is recognized by the JVM when your Spring Boot application runs inside the Docker container.
+
+Here's how you can update your `docker-compose.yml` file to include the necessary Java options:
+
+### Step-by-Step Guide
+
+1. **Ensure the Truststore is Included in the Docker Image**
+   
+   Update your `Dockerfile` to copy the custom truststore into the Docker image.
+
+   ```dockerfile
+   FROM openjdk:11-jre-slim
+
+   # Add your custom truststore
+   COPY custom-truststore.jks /path/to/custom-truststore.jks
+
+   # Add your Spring Boot application jar
+   COPY your-application.jar /app/your-application.jar
+
+   ENTRYPOINT ["java", "-jar", "/app/your-application.jar"]
+   ```
+
+2. **Update `docker-compose.yml` to Include Java Options**
+   
+   Configure the `docker-compose.yml` file to set the `JAVA_OPTS` environment variable, which will include the path to the custom truststore and the truststore password.
+
+   ```yaml
+   version: '3.8'
+   services:
+     your-service:
+       build:
+         context: .
+         dockerfile: Dockerfile
+       environment:
+         - JAVA_OPTS=-Djavax.net.ssl.trustStore=/path/to/custom-truststore.jks -Djavax.net.ssl.trustStorePassword=yourpassword
+   ```
+
+### Full Example
+
+Here's the complete example including the `Dockerfile` and `docker-compose.yml` file.
+
+#### Dockerfile
+```dockerfile
+FROM openjdk:11-jre-slim
+
+# Add your custom truststore
+COPY custom-truststore.jks /path/to/custom-truststore.jks
+
+# Add your Spring Boot application jar
+COPY your-application.jar /app/your-application.jar
+
+ENTRYPOINT ["java", "-jar", "/app/your-application.jar"]
+```
+
+#### docker-compose.yml
+```yaml
+version: '3.8'
+services:
+  your-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - JAVA_OPTS=-Djavax.net.ssl.trustStore=/path/to/custom-truststore.jks -Djavax.net.ssl.trustStorePassword=yourpassword
+```
+
+### Notes
+
+1. **Path to Truststore**: Ensure the path `/path/to/custom-truststore.jks` in the `docker-compose.yml` matches the path you used in the `Dockerfile`.
+2. **Truststore Password**: Replace `yourpassword` with the actual password you used when creating the truststore.
+
+### Verification
+
+After updating your `Dockerfile` and `docker-compose.yml`, build and run your Docker containers:
+
+```sh
+docker-compose build
+docker-compose up
+```
+
+This setup ensures that the JVM running your Spring Boot application will use the custom truststore to validate SSL certificates, resolving the "PKIX path building failed" error.
