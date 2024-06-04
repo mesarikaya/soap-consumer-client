@@ -137,3 +137,8 @@ docker-compose up
 ```
 
 This setup ensures that the JVM running your Spring Boot application will use the custom truststore to validate SSL certificates, resolving the "PKIX path building failed" error.
+
+
+------------------
+
+https://stackoverflow.com/questions/9619030/resolving-javax-net-ssl-sslhandshakeexception-sun-security-validator-validatore
