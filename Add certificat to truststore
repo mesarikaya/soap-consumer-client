@@ -85,3 +85,93 @@ keytool -list -v -keystore $JAVA_HOME/lib/security/cacerts -alias mycert
 ### Summary
 
 By following these steps, you can download a certificate using Firefox, convert it if necessary, and then import it into the Java trust store. This process ensures that your Java applications can trust the server presenting the certificate. If you encounter any issues or have specific questions about a step, feel free to ask!
+
+
+–__-_------------++++++-
+
+To download a PEM certificate from a website using the command line, you can use the `openssl` command. Here are the steps to do it:
+
+### Step-by-Step Guide to Download a PEM Certificate Using OpenSSL
+
+1. **Install OpenSSL**:
+   - Ensure that OpenSSL is installed on your system. On most Linux distributions, it should be installed by default. If not, you can install it using the package manager:
+
+   ```sh
+   sudo apt-get install openssl  # On Debian/Ubuntu
+   sudo yum install openssl      # On CentOS/RHEL
+   ```
+
+2. **Download the Certificate**:
+   - Use the `openssl` command to connect to the website and download the certificate.
+
+### Example: Downloading a Certificate from a Website
+
+Let's say you want to download the certificate from `https://example.com`. Here’s how you can do it:
+
+1. **Download the Certificate**:
+   - Use the `openssl s_client` command to connect to the website and output the certificate.
+
+   ```sh
+   openssl s_client -connect example.com:443 -showcerts </dev/null 2>/dev/null | openssl x509 -outform PEM > certificate.pem
+   ```
+
+   - This command connects to the website, retrieves the certificate, and saves it as `certificate.pem`.
+
+2. **Verify the Downloaded Certificate**:
+   - You can verify the certificate using the `openssl` command:
+
+   ```sh
+   openssl x509 -in certificate.pem -text -noout
+   ```
+
+   - This command will display the details of the downloaded certificate.
+
+### Detailed Steps:
+
+1. **Download and Save the Certificate**:
+
+   ```sh
+   openssl s_client -connect example.com:443 -showcerts </dev/null 2>/dev/null | openssl x509 -outform PEM > certificate.pem
+   ```
+
+   - `openssl s_client -connect example.com:443`: Connects to the server on port 443 (default HTTPS port).
+   - `-showcerts`: Displays the server's certificates.
+   - `</dev/null 2>/dev/null`: Suppresses input and error messages.
+   - `| openssl x509 -outform PEM`: Extracts the PEM format certificate.
+   - `> certificate.pem`: Saves the certificate to a file named `certificate.pem`.
+
+2. **Verify the Downloaded Certificate**:
+
+   ```sh
+   openssl x509 -in certificate.pem -text -noout
+   ```
+
+   - This command reads the certificate file and displays its details without the encoded format.
+
+### Adding the Certificate to the Java Trust Store
+
+Once you have downloaded the PEM certificate, you can proceed with converting it to DER format (if needed) and importing it into the Java trust store:
+
+1. **Convert PEM to DER** (if needed):
+
+   ```sh
+   openssl x509 -outform der -in certificate.pem -out certificate.der
+   ```
+
+2. **Import the Certificate into Java Trust Store**:
+
+   ```sh
+   sudo keytool -import -alias mycert -keystore $JAVA_HOME/lib/security/cacerts -file certificate.pem
+   ```
+
+   - You’ll be prompted to enter the keystore password. The default password is `changeit`.
+
+3. **Verify the Import**:
+
+   ```sh
+   sudo keytool -list -v -keystore $JAVA_HOME/lib/security/cacerts -alias mycert
+   ```
+
+### Summary
+
+By using the `openssl` command, you can download a PEM certificate directly from the command line. Then, you can convert it to DER format (if needed) and import it into the Java trust store using the `keytool` command. If you need further assistance with specific steps, feel free to ask!
