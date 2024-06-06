@@ -1,0 +1,55 @@
+Certainly! Here's the complete setup including the Dockerfile, Docker Compose file, and the commands to extract the keystore files from a running container:
+
+### Dockerfile
+
+```Dockerfile
+FROM openjdk:11-jre-slim
+
+WORKDIR /app
+
+# Copy your application JAR file
+COPY target/your-application.jar /app/your-application.jar
+
+# Copy keystores from host to image
+COPY ./local/keystores /app/src/main/resources/keystore
+
+# Set the entrypoint to run the application
+ENTRYPOINT ["java", "-jar", "/app/your-application.jar"]
+```
+
+### Docker Compose
+
+```yaml
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ./app
+    volumes:
+      - ./local/keystores:/app/src/main/resources/keystore
+    environment:
+      - KEYSTORE_PATH=/app/src/main/resources/keystore/keystore.jks
+      - TRUSTSTORE_PATH=/app/src/main/resources/keystore/truststore.jks
+      - KEYSTORE_PASSWORD=changeit
+      - TRUSTSTORE_PASSWORD=changeit
+    ports:
+      - "8080:8080"
+```
+
+### Extracting Keystore Files
+
+```bash
+# Run a temporary container based on the image
+docker run --name temp_container image_name
+
+# Copy the keystore files from the container to your local machine
+docker cp temp_container:/app/src/main/resources/keystore /path/to/local/directory
+
+# Remove the temporary container
+docker rm temp_container
+```
+
+Replace `image_name` with the name of the Docker image that contains the keystore files, and `/path/to/local/directory` with the path on your local machine where you want to save the files.
+
+With this setup, the Dockerfile copies the keystore files into the image during the build process, and the Docker Compose file mounts the local keystore directory into the container. Finally, the provided commands allow you to extract the keystore files from a running container.
