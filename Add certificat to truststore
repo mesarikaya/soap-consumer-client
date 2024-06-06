@@ -175,3 +175,9 @@ Once you have downloaded the PEM certificate, you can proceed with converting it
 ### Summary
 
 By using the `openssl` command, you can download a PEM certificate directly from the command line. Then, you can convert it to DER format (if needed) and import it into the Java trust store using the `keytool` command. If you need further assistance with specific steps, feel free to ask!
+
+_---------
+HttpsURLConnection
+        .setDefaultSSLSocketFactory(sc.getSocketFactory());
+
+
