@@ -1,1 +1,187 @@
+https://developer.hashicorp.com/vault/docs/platform/k8s/helm/run
+
 how to install vault in k8s
+
+Yes, you can deploy HashiCorp Vault on Kubernetes without using Helm by manually applying the necessary Kubernetes manifests. Here's a step-by-step guide to deploy Vault manually:
+
+### Step 1: Create a Namespace
+
+First, create a namespace for Vault if you haven't already:
+
+```sh
+kubectl create namespace vault
+```
+
+### Step 2: Create a ConfigMap for Vault Configuration
+
+Create a ConfigMap that holds the Vault configuration:
+
+```yaml
+# vault-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-config
+  namespace: vault
+data:
+  vault.hcl: |
+    storage "file" {
+      path = "/vault/data"
+    }
+
+    listener "tcp" {
+      address     = "0.0.0.0:8200"
+      tls_disable = 1
+    }
+
+    ui = true
+```
+
+Apply the ConfigMap:
+
+```sh
+kubectl apply -f vault-configmap.yaml
+```
+
+### Step 3: Create a PersistentVolume and PersistentVolumeClaim
+
+Create a PersistentVolume and PersistentVolumeClaim for Vault's storage:
+
+```yaml
+# vault-pv.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: vault-pv
+  namespace: vault
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/data"
+
+# vault-pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vault-pvc
+  namespace: vault
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+```
+
+Apply the PersistentVolume and PersistentVolumeClaim:
+
+```sh
+kubectl apply -f vault-pv.yaml
+kubectl apply -f vault-pvc.yaml
+```
+
+### Step 4: Create a Deployment for Vault
+
+Create a Deployment that runs the Vault server:
+
+```yaml
+# vault-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vault
+  namespace: vault
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vault
+  template:
+    metadata:
+      labels:
+        app: vault
+    spec:
+      containers:
+      - name: vault
+        image: vault:latest
+        ports:
+        - containerPort: 8200
+        volumeMounts:
+        - name: config
+          mountPath: /vault/config
+        - name: data
+          mountPath: /vault/data
+        env:
+        - name: VAULT_LOCAL_CONFIG
+          valueFrom:
+            configMapKeyRef:
+              name: vault-config
+              key: vault.hcl
+      volumes:
+      - name: config
+        configMap:
+          name: vault-config
+      - name: data
+        persistentVolumeClaim:
+          claimName: vault-pvc
+```
+
+Apply the Deployment:
+
+```sh
+kubectl apply -f vault-deployment.yaml
+```
+
+### Step 5: Create a Service for Vault
+
+Create a Service to expose Vault:
+
+```yaml
+# vault-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault
+  namespace: vault
+spec:
+  ports:
+  - port: 8200
+    targetPort: 8200
+  selector:
+    app: vault
+```
+
+Apply the Service:
+
+```sh
+kubectl apply -f vault-service.yaml
+```
+
+### Step 6: Initialize and Unseal Vault
+
+Once Vault is deployed, you need to initialize and unseal it. You can do this by port-forwarding to the Vault pod and using the Vault CLI:
+
+1. Port-forward to the Vault pod:
+
+   ```sh
+   kubectl port-forward -n vault svc/vault 8200:8200
+   ```
+
+2. Initialize Vault:
+
+   ```sh
+   vault operator init
+   ```
+
+3. Unseal Vault (using the keys provided from the init command):
+
+   ```sh
+   vault operator unseal <unseal_key_1>
+   vault operator unseal <unseal_key_2>
+   vault operator unseal <unseal_key_3>
+   ```
+
+By following these steps, you can deploy HashiCorp Vault on Kubernetes without using Helm. This approach gives you full control over the deployment and configuration process. If you have any specific requirements or encounter any issues, feel free to ask for further assistance!
