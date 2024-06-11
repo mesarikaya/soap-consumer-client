@@ -1,3 +1,9 @@
+https://github.com/cert-manager/cert-manager/issues/256
+
+_----------6
+
+
+
 If you don't have Vault installed locally, you can still manage and configure Vault on your Kubernetes cluster using a combination of Kubernetes tools and Vault commands executed within Kubernetes. Here’s how you can proceed:
 
 ### Step 1: Install Vault Using Helm
