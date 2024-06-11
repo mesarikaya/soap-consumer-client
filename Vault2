@@ -1,0 +1,122 @@
+If you don't have Vault installed locally, you can still manage and configure Vault on your Kubernetes cluster using a combination of Kubernetes tools and Vault commands executed within Kubernetes. Here’s how you can proceed:
+
+### Step 1: Install Vault Using Helm
+
+First, let's install Vault on your Kubernetes cluster using Helm, making sure it’s set up properly with the necessary overrides.
+
+1. **Add the HashiCorp Helm repository and update:**
+
+    ```sh
+    helm repo add hashicorp https://helm.releases.hashicorp.com
+    helm repo update
+    ```
+
+2. **Create the `test` namespace:**
+
+    ```sh
+    kubectl create namespace test
+    ```
+
+3. **Install Vault in the `test` namespace:**
+
+    Assuming your `override-values.yml` contains necessary configuration details:
+
+    ```sh
+    helm install vault hashicorp/vault --namespace test -f override-values.yml
+    ```
+
+### Step 2: Configure Kubernetes Authentication in Vault
+
+Since you don't have Vault installed locally, we’ll use the Vault CLI inside a Kubernetes pod.
+
+1. **Port-forward to the Vault service to access the UI or CLI temporarily:**
+
+    ```sh
+    kubectl port-forward -n test svc/vault 8200:8200
+    ```
+
+2. **Run Vault commands within a Kubernetes pod:**
+
+    To avoid the need for local Vault installation, you can use `kubectl exec` to run commands inside a Vault pod.
+
+    **Get the name of a Vault pod:**
+
+    ```sh
+    VAULT_POD=$(kubectl get pods -n test -l app.kubernetes.io/name=vault -o jsonpath="{.items[0].metadata.name}")
+    ```
+
+    **Exec into the Vault pod:**
+
+    ```sh
+    kubectl exec -n test -it $VAULT_POD -- /bin/sh
+    ```
+
+3. **Within the Vault pod shell, enable Kubernetes authentication and configure Vault:**
+
+    ```sh
+    vault auth enable kubernetes
+
+    TOKEN_REVIEWER_JWT=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+    KUBE_HOST=$(kubectl config view --raw --minify --flatten -o jsonpath='{.clusters[].cluster.server}')
+    KUBE_CA_CERT=$(cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt)
+
+    vault write auth/kubernetes/config \
+        token_reviewer_jwt="$TOKEN_REVIEWER_JWT" \
+        kubernetes_host="$KUBE_HOST" \
+        kubernetes_ca_cert="$KUBE_CA_CERT"
+    ```
+
+### Step 3: Create Policies and Roles in Vault
+
+From within the same Vault pod shell:
+
+1. **Create a policy for accessing secrets:**
+
+    ```sh
+    cat <<EOF > secret-policy.hcl
+    path "secret/data/myapp/*" {
+      capabilities = ["read"]
+    }
+    EOF
+
+    vault policy write myapp-policy secret-policy.hcl
+    ```
+
+2. **Create a role that binds the policy to a Kubernetes service account:**
+
+    ```sh
+    vault write auth/kubernetes/role/myapp-role \
+        bound_service_account_names=myapp-sa \
+        bound_service_account_namespaces=test \
+        policies=myapp-policy \
+        ttl=24h
+    ```
+
+### Step 4: Create Kubernetes Resources
+
+1. **Create a service account for your application:**
+
+    ```sh
+    kubectl create serviceaccount myapp-sa -n test
+    ```
+
+2. **Create a ClusterRole and ClusterRoleBinding:**
+
+    **vault-clusterrole.yaml:**
+
+    ```yaml
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRole
+    metadata:
+      name: vault-clusterrole
+    rules:
+      - apiGroups: [""]
+        resources: ["secrets"]
+        verbs: ["get", "list", "watch"]
+    ```
+
+    **vault-clusterrolebinding.yaml:**
+
+    ```yaml
+    apiVersion: rbac.authorization.k8s.io/v1
+   
