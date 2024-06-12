@@ -1,0 +1,365 @@
+### Directory Structure
+
+```plaintext
+my-microservices/
+├── charts/
+│   ├── microservice1/
+│   │   ├── templates/
+│   │   │   ├── deployment.yaml
+│   │   │   ├── service.yaml
+│   │   │   ├── configmap.yaml
+│   │   │   ├── secret.yaml
+│   │   │   └── _helpers.tpl
+│   │   ├── values.yaml
+│   │   ├── dev/
+│   │   │   ├── values.yaml
+│   │   │   ├── secret.yaml
+│   │   ├── stage/
+│   │   │   ├── values.yaml
+│   │   │   ├── secret.yaml
+│   │   ├── prod/
+│   │   │   ├── values.yaml
+│   │   │   ├── secret.yaml
+│   │   ├── Chart.yaml
+│   │   └── .helmignore
+├── helmfile.yaml
+└── argocd/
+    └── applications/
+        └── microservice1-application.yaml
+```
+
+### Chart.yaml
+
+```yaml
+apiVersion: v2
+name: microservice1
+description: A Helm chart for deploying microservice1
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+maintainers:
+  - name: Your Name
+    email: your.email@example.com
+keywords:
+  - microservice
+  - helm
+  - kubernetes
+sources:
+  - https://github.com/yourusername/my-microservices
+dependencies: []
+```
+
+### values.yaml
+
+```yaml
+replicaCount: 1
+
+image:
+  repository: myregistry/microservice1
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+
+env:
+  ENV: dev
+  DB_HOST: localhost
+  DB_USER: user
+  DB_PASS: pass
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+secrets:
+  username: "default_user"
+  password: "default_pass"
+```
+
+### dev/values.yaml
+
+```yaml
+replicaCount: 1
+
+image:
+  repository: myregistry/microservice1
+  tag: dev
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+
+env:
+  ENV: dev
+  DB_HOST: dev-db.example.com
+  DB_USER: dev_user
+  DB_PASS: dev_pass
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+secrets:
+  username: "dev_user"
+  password: "dev_pass"
+```
+
+### stage/values.yaml
+
+```yaml
+replicaCount: 2
+
+image:
+  repository: myregistry/microservice1
+  tag: stage
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+
+env:
+  ENV: stage
+  DB_HOST: stage-db.example.com
+  DB_USER: stage_user
+  DB_PASS: stage_pass
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 200m
+    memory: 256Mi
+
+secrets:
+  username: "stage_user"
+  password: "stage_pass"
+```
+
+### prod/values.yaml
+
+```yaml
+replicaCount: 3
+
+image:
+  repository: myregistry/microservice1
+  tag: prod
+  pullPolicy: IfNotPresent
+
+service:
+  type: LoadBalancer
+
+env:
+  ENV: prod
+  DB_HOST: prod-db.example.com
+  DB_USER: prod_user
+  DB_PASS: prod_pass
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+secrets:
+  username: "prod_user"
+  password: "prod_pass"
+```
+
+### deployment.yaml (template)
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "microservice1.fullname" . }}
+  labels:
+    app: {{ include "microservice1.name" . }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "microservice1.name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "microservice1.name" . }}
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports:
+            - containerPort: 80
+          env:
+            - name: ENV
+              value: {{ .Values.env.ENV }}
+            - name: DB_HOST
+              value: {{ .Values.env.DB_HOST }}
+            - name: DB_USER
+              value: {{ .Values.env.DB_USER }}
+            - name: DB_PASS
+              value: {{ .Values.env.DB_PASS }}
+          resources:
+            limits:
+              cpu: {{ .Values.resources.limits.cpu }}
+              memory: {{ .Values.resources.limits.memory }}
+            requests:
+              cpu: {{ .Values.resources.requests.cpu }}
+              memory: {{ .Values.resources.requests.memory }}
+```
+
+### service.yaml (template)
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "microservice1.fullname" . }}
+  labels:
+    app: {{ include "microservice1.name" . }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+  selector:
+    app: {{ include "microservice1.name" . }}
+```
+
+### configmap.yaml (template)
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "microservice1.fullname" . }}-config
+data:
+  my-key: "my-value"
+```
+
+### secret.yaml (template)
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "microservice1.fullname" . }}-secret
+type: Opaque
+data:
+  username: {{ .Values.secrets.username | b64enc | quote }}
+  password: {{ .Values.secrets.password | b64enc | quote }}
+```
+
+### argocd/applications/microservice1-application.yaml
+
+This file will serve as the template for the Argo CD application manifest, using Helm templating for environment-specific values.
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: microservice1-{{ .Environment.Name }}
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/yourusername/my-microservices'
+    targetRevision: HEAD
+    path: charts/microservice1
+    helm:
+      valueFiles:
+        - {{ .Environment.ValuesFile }}
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: {{ .Environment.Namespace }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+```
+
+### helmfile.yaml
+
+This file will manage the deployment of your Helm charts and Argo CD applications for different environments.
+
+```yaml
+environments:
+  dev:
+    values:
+      - charts/microservice1/dev/values.yaml
+  stage:
+    values:
+      - charts/microservice1/stage/values.yaml
+  prod:
+    values:
+      - charts/microservice1/prod/values.yaml
+
+releases:
+  - name: microservice1-application
+    namespace: argocd
+    chart: ./argocd/applications
+    values:
+      - values.yaml
+    set:
+      - name: Environment.Name
+        value: dev
+      - name: Environment.ValuesFile
+        value: charts/microservice1/dev/values.yaml
+      - name: Environment.Namespace
+        value: dev-namespace
+
+  - name: microservice1-application
+    namespace: argocd
+    chart: ./argocd/applications
+    values:
+      - values.yaml
+    set:
+      - name: Environment.Name
+        value: stage
+      - name: Environment.ValuesFile
+        value: charts/microservice1/stage/values.yaml
+      - name: Environment.Namespace
+        value: stage-namespace
+
+  - name: microservice1-application
+    namespace: argocd
+    chart: ./argocd/applications
+    values:
+      - values.yaml
+    set:
+      - name: Environment.Name
+        value: prod
+      - name: Environment.ValuesFile
+        value: charts/microservice1/prod/values.yaml
+      - name: Environment.Namespace
+        value: prod-namespace
+```
+
+### Deploy Using Helmfile
+
+Use `helmfile` to deploy the Argo CD application manifests for each environment.
+
+```bash
+# Deploy to dev environment
+helmfile -e dev apply
+
+# Deploy to stage environment
+helmfile -e stage apply
+
+# Deploy to prod environment
+helmfile -e prod apply
+```
+
+This setup ensures you have a single
