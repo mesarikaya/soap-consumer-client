@@ -363,3 +363,7 @@ helmfile -e prod apply
 ```
 
 This setup ensures you have a single
+
+helm upgrade --install microservice1-dev ./charts/microservice1 \
+  --namespace dev-namespace \
+  --values charts/microservice1/dev/values.yaml
