@@ -1,0 +1,136 @@
+To flatten a list of users within a document in Elasticsearch and create separate fields for their IDs and names, you can use the `scripted_fields` in a `painless` script or an `ingest pipeline` with the `foreach` processor. Here's how you can do it in both ways:
+
+### Using Scripted Fields
+
+Scripted fields allow you to compute new fields at query time without modifying the original documents.
+
+1. **Create an Index with Sample Documents:**
+
+   Suppose you have documents like this:
+
+   ```json
+   {
+     "users": [
+       {"id": 1, "name": "Alice"},
+       {"id": 2, "name": "Bob"}
+     ]
+   }
+   ```
+
+2. **Query with Scripted Fields:**
+
+   You can use a query to create scripted fields for IDs and names. Here's an example query:
+
+   ```json
+   GET /your_index/_search
+   {
+     "query": {
+       "match_all": {}
+     },
+     "script_fields": {
+       "user_ids": {
+         "script": {
+           "lang": "painless",
+           "source": "params['_source']['users'].stream().map(u -> u['id']).collect(Collectors.toList())"
+         }
+       },
+       "user_names": {
+         "script": {
+           "lang": "painless",
+           "source": "params['_source']['users'].stream().map(u -> u['name']).collect(Collectors.toList())"
+         }
+       }
+     }
+   }
+   ```
+
+   This will return the `user_ids` and `user_names` as separate fields in the query response.
+
+### Using an Ingest Pipeline
+
+If you want to store the flattened fields in your documents, you can use an ingest pipeline with the `foreach` processor.
+
+1. **Create an Ingest Pipeline:**
+
+   ```json
+   PUT _ingest/pipeline/flatten_users
+   {
+     "processors": [
+       {
+         "foreach": {
+           "field": "users",
+           "processor": {
+             "script": {
+               "lang": "painless",
+               "source": """
+                 if (ctx.containsKey('user_ids') == false) {
+                   ctx.user_ids = new ArrayList();
+                 }
+                 if (ctx.containsKey('user_names') == false) {
+                   ctx.user_names = new ArrayList();
+                 }
+                 ctx.user_ids.add(ctx['users']['id']);
+                 ctx.user_names.add(ctx['users']['name']);
+               """
+             }
+           }
+         }
+       }
+     ]
+   }
+   ```
+
+2. **Index Documents Using the Pipeline:**
+
+   ```json
+   POST /your_index/_doc?pipeline=flatten_users
+   {
+     "users": [
+       {"id": 1, "name": "Alice"},
+       {"id": 2, "name": "Bob"}
+     ]
+   }
+   ```
+
+   This will process the document through the pipeline and store the `user_ids` and `user_names` as separate fields in the document.
+
+### Verifying the Flattened Fields
+
+After the documents are indexed with the ingest pipeline, you can verify that the `user_ids` and `user_names` fields are present:
+
+```json
+GET /your_index/_search
+{
+  "query": {
+    "match_all": {}
+  }
+}
+```
+
+The documents will now include `user_ids` and `user_names` fields:
+
+```json
+{
+  "hits": {
+    "hits": [
+      {
+        "_source": {
+          "users": [
+            {"id": 1, "name": "Alice"},
+            {"id": 2, "name": "Bob"}
+          ],
+          "user_ids": [1, 2],
+          "user_names": ["Alice", "Bob"]
+        }
+      }
+    ]
+  }
+}
+```
+
+### Summary
+
+- **Scripted Fields:** Useful for on-the-fly calculations without modifying documents.
+- **Ingest Pipeline:** Useful for storing flattened fields within the documents for later retrieval.
+
+Choose the method that best fits your use case!
