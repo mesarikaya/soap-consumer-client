@@ -1,0 +1,179 @@
+Yes, you can definitely adapt your existing service implementation using interfaces like `LogAware`, `TeamAware`, `ActionAware`, and so on. This approach will allow you to dynamically check if an object implements certain interfaces and then build your log string accordingly. This way, you avoid the need for a large number of visitor classes and keep your codebase more manageable.
+
+### Step-by-Step Implementation Using Interface-based Logging
+
+1. **Define the Marker Interfaces**
+2. **Implement Marker Interfaces in Your Classes**
+3. **Create a LogService**
+4. **Adapt Your Logging Logic**
+
+### Implementation
+
+#### 1. Define the Marker Interfaces
+
+```java
+public interface LogAware {}
+
+public interface TeamAware {
+    Team getTeam();
+}
+
+public interface ActionAware {
+    Action getAction();
+}
+
+public interface DescriptionAware {
+    String getDescription();
+}
+```
+
+#### 2. Implement Marker Interfaces in Your Classes
+
+```java
+public class A extends Request implements TeamAware, ActionAware, DescriptionAware, LogAware {
+    private Team team;
+    private Action action;
+    private String description;
+
+    // Constructors, getters, and setters
+
+    @Override
+    public Team getTeam() {
+        return team;
+    }
+
+    @Override
+    public Action getAction() {
+        return action;
+    }
+
+    @Override
+    public String getDescription() {
+        return description;
+    }
+}
+
+public class B implements DescriptionAware, LogAware {
+    private String description;
+
+    // Constructor, getter, and setter
+
+    @Override
+    public String getDescription() {
+        return description;
+    }
+}
+
+public class C implements TeamAware, LogAware {
+    private Team team;
+
+    // Constructor, getter, and setter
+
+    @Override
+    public Team getTeam() {
+        return team;
+    }
+}
+```
+
+#### 3. Create a LogService
+
+```java
+@Service
+public class LogService {
+    // You can use RestTemplate, WebClient, or any other HTTP client to call your log service
+    private final RestTemplate restTemplate;
+
+    @Autowired
+    public LogService(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
+    }
+
+    public void log(LogAware logAware) {
+        StringBuilder logBuilder = new StringBuilder();
+        logBuilder.append(logAware.getClass().getSimpleName()).append(" [");
+
+        if (logAware instanceof TeamAware) {
+            Team team = ((TeamAware) logAware).getTeam();
+            if (team != null) {
+                logBuilder.append("Team [name=").append(team.getName()).append(", id=").append(team.getId()).append("], ");
+            }
+        }
+
+        if (logAware instanceof ActionAware) {
+            Action action = ((ActionAware) logAware).getAction();
+            if (action != null) {
+                logBuilder.append("Action [name=").append(action.getName()).append(", value=").append(action.getValue()).append("], ");
+            }
+        }
+
+        if (logAware instanceof DescriptionAware) {
+            String description = ((DescriptionAware) logAware).getDescription();
+            if (description != null) {
+                logBuilder.append("Description: ").append(description).append(", ");
+            }
+        }
+
+        if (logBuilder.length() > 0) {
+            logBuilder.setLength(logBuilder.length() - 2); // Remove the last ", "
+        }
+
+        logBuilder.append("]");
+        sendLog(logBuilder.toString());
+    }
+
+    private void sendLog(String message) {
+        // Construct the log request
+        LogRequest logRequest = new LogRequest(message);
+        // Send the log request to the external log service
+        restTemplate.postForObject("http://external-log-service/api/logs", logRequest, Void.class);
+    }
+
+    private static class LogRequest {
+        private String message;
+
+        // Constructor, getter, and setter
+
+        public LogRequest(String message) {
+            this.message = message;
+        }
+
+        public String getMessage() {
+            return message;
+        }
+
+        public void setMessage(String message) {
+            this.message = message;
+        }
+    }
+}
+```
+
+#### 4. Use the LogService in Your Application
+
+```java
+@SpringBootApplication
+public class Application {
+
+    public static void main(String[] args) {
+        ApplicationContext context = SpringApplication.run(Application.class, args);
+
+        LogService logService = context.getBean(LogService.class);
+
+        Team team = new Team("Development", 1);
+        Action action = new Action("Deploy", "Deploy to production");
+
+        A a = new A(team, action, "A description");
+        B b = new B("B description");
+        C c = new C(team);
+
+        logService.log(a); // Logs A details
+        logService.log(b); // Logs B details
+        logService.log(c); // Logs C details
+    }
+}
+```
+
+### Summary
+
+This approach uses marker interfaces to denote which objects have specific attributes like `Team`, `Action`, or `Description`. The `LogService` then dynamically checks if an object implements these interfaces and constructs the log string accordingly. This method keeps your codebase clean and maintainable while avoiding the complexity of a large number of visitor classes. It leverages Java's type system and polymorphism to create a flexible logging mechanism.
