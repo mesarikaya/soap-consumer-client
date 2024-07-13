@@ -1,0 +1,57 @@
+----axios example ---
+const axios = require('axios');
+const FormData = require('form-data');
+const fs = require('fs');
+let data = new FormData();
+data.append('multipartFile', fs.createReadStream('<file_location>'));
+data.append('visibility', 'false');
+data.append('uploadedBy', 'test user');
+data.append('lastModifiedDateTime', '2023-12-27T14:30:00');
+data.append('bucketName', 'devops-test');
+
+let config = {
+  method: 'post',
+  maxBodyLength: Infinity,
+  url: 'localhost:8000/api/v1/s3-files',
+  headers: { 
+    ...data.getHeaders()
+  },
+  data : data
+};
+
+axios.request(config)
+.then((response) => {
+  console.log(JSON.stringify(response.data));
+})
+.catch((error) => {
+  console.log(error);
+});
+
+--- http example----
+POST /api/v1/s3-files HTTP/1.1
+Host: localhost:8000
+Content-Length: 668
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="multipartFile"; filename="<file_location>"
+Content-Type: text/csv
+
+(data)
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="visibility"
+
+false
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="uploadedBy"
+
+test_user
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="lastModifiedDateTime"
+
+2023-12-27T14:30:00
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="bucketName"
+
+ergin-devops-test
+------WebKitFormBoundary7MA4YWxkTrZu0gW--
