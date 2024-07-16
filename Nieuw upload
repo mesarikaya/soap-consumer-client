@@ -19,3 +19,6 @@ https://github.com/spring-projects/spring-security/issues/13731
 https://www.codejava.net/frameworks/spring-boot/file-download-upload-rest-api-examples
 
 https://www.baeldung.com/spring-apache-file-upload
+
+logging.level.org.springframework.web=DEBUG
+logging.level.org.springframework.web.multipart=DEBUG
