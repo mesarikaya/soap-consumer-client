@@ -1,3 +1,5 @@
+search package: org.springframework.web.multipart.MultipartFile
+
 check jf there is vaadin
 vaadin-spring-boot-starter
 
