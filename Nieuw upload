@@ -22,3 +22,5 @@ https://www.baeldung.com/spring-apache-file-upload
 
 logging.level.org.springframework.web=DEBUG
 logging.level.org.springframework.web.multipart=DEBUG
+
+3. Avoid Consuming InputStream DirectlyIf you are accessing the HttpServletRequest or InputStream directly within a filter, interceptor, or another component before the request reaches your controller, be cautious not to consume or close the stream prematurely.
