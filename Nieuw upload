@@ -1,6 +1,11 @@
 check jf there is vaadin
 vaadin-spring-boot-starter
 
+try: spring.mvc.hiddenmethod.filter.enabled=false
+
+try: spring.servlet.multipart.enabled = false
+do not provide a MultipartResolver
+
 https://stackoverflow.com/questions/75971936/spring-mvc-multi-part-configuration
 
 
