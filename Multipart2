@@ -1,0 +1,182 @@
+To handle requests that include both JSON and a file in Spring Boot, you need to use the `@RequestPart` annotation for the file and the `@RequestPart` annotation for the JSON part. Here’s a detailed approach to achieve this:
+
+1. **Controller Method**:
+   Define your controller method to handle both a file and a JSON object. Use `@RequestPart` for the file and another `@RequestPart` for the JSON data. Here’s an example:
+
+   ```java
+   import org.springframework.http.ResponseEntity;
+   import org.springframework.web.bind.annotation.PostMapping;
+   import org.springframework.web.bind.annotation.RequestMapping;
+   import org.springframework.web.bind.annotation.RequestPart;
+   import org.springframework.web.bind.annotation.RestController;
+   import org.springframework.web.multipart.MultipartFile;
+
+   @RestController
+   @RequestMapping("/api")
+   public class FileUploadController {
+
+       @PostMapping("/upload")
+       public ResponseEntity<String> handleFileUpload(
+               @RequestPart("file") MultipartFile file,
+               @RequestPart("data") MyData data) {
+           if (file.isEmpty()) {
+               return ResponseEntity.badRequest().body("File is empty");
+           }
+           // Handle the file upload and JSON data
+           return ResponseEntity.ok("File uploaded successfully with data: " + data.toString());
+       }
+   }
+
+   // Define a class to map the JSON data
+   public static class MyData {
+       private String field1;
+       private int field2;
+
+       // Getters and setters
+
+       @Override
+       public String toString() {
+           return "MyData{field1='" + field1 + "', field2=" + field2 + '}';
+       }
+   }
+   ```
+
+2. **Configuration**:
+   Ensure you have the correct multipart configuration in your `application.properties`:
+
+   ```properties
+   spring.servlet.multipart.enabled=true
+   spring.servlet.multipart.max-file-size=10MB
+   spring.servlet.multipart.max-request-size=10MB
+   ```
+
+3. **Request Setup**:
+   When sending the request, ensure that you include both the file and the JSON data. Here’s how you can do it using `curl` and Postman:
+
+   **Using `curl`:**
+
+   ```sh
+   curl -X POST http://localhost:8080/api/upload \
+       -F "file=@path/to/your/file" \
+       -F "data={\"field1\":\"value1\",\"field2\":123};type=application/json"
+   ```
+
+   **Using Postman:**
+
+   - Set the request method to `POST`.
+   - Set the URL to `http://localhost:8080/api/upload`.
+   - Under the `Body` tab, select `form-data`.
+   - Add a key named `file`, set the type to `File`, and upload the file.
+   - Add a key named `data`, set the type to `Text`, and enter the JSON data. Make sure to set the `Content-Type` to `application/json` for the JSON part.
+
+4. **Debug Logging**:
+   Enable detailed logging to debug any issues related to multipart handling and `HttpMessageConverter`:
+
+   ```properties
+   logging.level.org.springframework.web=DEBUG
+   logging.level.org.springframework.http.converter=DEBUG
+   logging.level.org.springframework.web.multipart=DEBUG
+   ```
+
+5. **Customizing HttpMessageConverters**:
+   If needed, customize the `HttpMessageConverter` for handling multipart requests. Here’s how you can configure it in a `WebMvcConfigurer`:
+
+   ```java
+   import org.springframework.context.annotation.Configuration;
+   import org.springframework.http.converter.HttpMessageConverter;
+   import org.springframework.http.converter.MultipartHttpMessageConverter;
+   import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+   import java.util.List;
+
+   @Configuration
+   public class WebConfig implements WebMvcConfigurer {
+
+       @Override
+       public void configureMessageConverters(List<HttpMessageConverter<?>> converters) {
+           converters.add(new MultipartHttpMessageConverter());
+       }
+   }
+   ```
+
+6. **Complete Example**:
+   Here is a complete example of a minimal Spring Boot application to handle multipart file upload along with JSON data:
+
+   **Application Class**:
+
+   ```java
+   import org.springframework.boot.SpringApplication;
+   import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+   @SpringBootApplication
+   public class MultipartDemoApplication {
+       public static void main(String[] args) {
+           SpringApplication.run(MultipartDemoApplication.class, args);
+       }
+   }
+   ```
+
+   **Controller Class**:
+
+   ```java
+   import org.springframework.http.ResponseEntity;
+   import org.springframework.web.bind.annotation.PostMapping;
+   import org.springframework.web.bind.annotation.RequestMapping;
+   import org.springframework.web.bind.annotation.RequestPart;
+   import org.springframework.web.bind.annotation.RestController;
+   import org.springframework.web.multipart.MultipartFile;
+
+   @RestController
+   @RequestMapping("/api")
+   public class FileUploadController {
+
+       @PostMapping("/upload")
+       public ResponseEntity<String> handleFileUpload(
+               @RequestPart("file") MultipartFile file,
+               @RequestPart("data") MyData data) {
+           if (file.isEmpty()) {
+               return ResponseEntity.badRequest().body("File is empty");
+           }
+           return ResponseEntity.ok("File uploaded successfully with data: " + data.toString());
+       }
+   }
+
+   public static class MyData {
+       private String field1;
+       private int field2;
+
+       public String getField1() {
+           return field1;
+       }
+
+       public void setField1(String field1) {
+           this.field1 = field1;
+       }
+
+       public int getField2() {
+           return field2;
+       }
+
+       public void setField2(int field2) {
+           this.field2 = field2;
+       }
+
+       @Override
+       public String toString() {
+           return "MyData{field1='" + field1 + "', field2=" + field2 + '}';
+       }
+   }
+   ```
+
+   **application.properties**:
+
+   ```properties
+   spring.servlet.multipart.enabled=true
+   spring.servlet.multipart.max-file-size=10MB
+   spring.servlet.multipart.max-request-size=10MB
+   logging.level.org.springframework.web=DEBUG
+   logging.level.org.springframework.http.converter=DEBUG
+   logging.level.org.springframework.web.multipart=DEBUG
+   ```
+
+By following these steps, you should be able to handle multipart file uploads along with JSON data in your Spring Boot application. If you encounter any specific errors or issues, please provide the details so I can assist further.
