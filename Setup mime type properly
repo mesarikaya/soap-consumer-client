@@ -1,0 +1,205 @@
+To map the entity back to a DTO for sending to the frontend, you can extend the `ImageMapper` interface to include a method for converting the entity to the DTO. The mapper will use a helper method to encode the image byte array back to a base64 string.
+
+Here's the updated approach:
+
+### 1. Define the DTO
+
+Create a DTO class that contains the base64-encoded image string.
+
+```java
+public class ImageDTO {
+    private String logo;
+
+    // Getters and setters
+    public String getLogo() {
+        return logo;
+    }
+
+    public void setLogo(String logo) {
+        this.logo = logo;
+    }
+}
+```
+
+### 2. Update the Entity
+
+Ensure your entity class has the fields for the byte array and the MIME type.
+
+```java
+import javax.persistence.*;
+
+@Entity
+public class ImageEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Lob
+    private byte[] logo;
+
+    private String mimeType;
+
+    // Getters and setters
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public byte[] getLogo() {
+        return logo;
+    }
+
+    public void setLogo(byte[] logo) {
+        this.logo = logo;
+    }
+
+    public String getMimeType() {
+        return mimeType;
+    }
+
+    public void setMimeType(String mimeType) {
+        this.mimeType = mimeType;
+    }
+}
+```
+
+### 3. Create the Helper Class
+
+Create a helper class that contains methods to handle the conversion between the base64 string and byte array.
+
+```java
+import java.util.Base64;
+
+public class ImageMapperHelper {
+
+    public static byte[] decodeBase64ToBytes(String base64Image) {
+        if (base64Image == null || base64Image.isEmpty()) {
+            return null;
+        }
+        String base64Data = base64Image.substring(base64Image.indexOf(",") + 1);
+        return Base64.getDecoder().decode(base64Data);
+    }
+
+    public static String extractMimeType(String base64Image) {
+        if (base64Image == null || base64Image.isEmpty()) {
+            return null;
+        }
+        return base64Image.substring(base64Image.indexOf(":") + 1, base64Image.indexOf(";"));
+    }
+
+    public static String encodeBytesToBase64(byte[] imageBytes, String mimeType) {
+        if (imageBytes == null || mimeType == null) {
+            return null;
+        }
+        return "data:" + mimeType + ";base64," + Base64.getEncoder().encodeToString(imageBytes);
+    }
+}
+```
+
+### 4. Create the Mapper Interface
+
+Define the mapper interface, using the helper class for custom mappings.
+
+```java
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.Mappings;
+import org.mapstruct.factory.Mappers;
+
+@Mapper(uses = ImageMapperHelper.class)
+public interface ImageMapper {
+    ImageMapper INSTANCE = Mappers.getMapper(ImageMapper.class);
+
+    @Mappings({
+        @Mapping(target = "logo", expression = "java(ImageMapperHelper.decodeBase64ToBytes(dto.getLogo()))"),
+        @Mapping(target = "mimeType", expression = "java(ImageMapperHelper.extractMimeType(dto.getLogo()))")
+    })
+    ImageEntity toEntity(ImageDTO dto);
+
+    @Mapping(target = "logo", expression = "java(ImageMapperHelper.encodeBytesToBase64(entity.getLogo(), entity.getMimeType()))")
+    ImageDTO toDto(ImageEntity entity);
+}
+```
+
+### 5. Update the Service
+
+Update the service to use the mapper for both saving and retrieving.
+
+```java
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.util.Optional;
+
+@Service
+public class ImageService {
+
+    @Autowired
+    private ImageRepository imageRepository;
+
+    public ImageEntity saveImage(ImageDTO imageDTO) {
+        ImageEntity imageEntity = ImageMapper.INSTANCE.toEntity(imageDTO);
+        return imageRepository.save(imageEntity);
+    }
+
+    public Optional<ImageDTO> getImage(Long id) {
+        return imageRepository.findById(id).map(ImageMapper.INSTANCE::toDto);
+    }
+}
+```
+
+### 6. Update the Controller
+
+Modify the controller to handle both saving and retrieving the image data.
+
+```java
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/images")
+public class ImageController {
+
+    @Autowired
+    private ImageService imageService;
+
+    @PostMapping("/upload")
+    public ResponseEntity<Long> uploadImage(@RequestBody ImageDTO imageDTO) {
+        ImageEntity imageEntity = imageService.saveImage(imageDTO);
+        return ResponseEntity.ok(imageEntity.getId());
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<ImageDTO> getImage(@PathVariable Long id) {
+        Optional<ImageDTO> imageDtoOptional = imageService.getImage(id);
+        return imageDtoOptional.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+    }
+}
+```
+
+### Explanation:
+
+1. **DTO (`ImageDTO`):**
+   - Contains the base64-encoded image string (`logo`).
+
+2. **Entity (`ImageEntity`):**
+   - Contains the byte array (`logo`) and MIME type (`mimeType`).
+
+3. **Helper Class (`ImageMapperHelper`):**
+   - Contains methods to decode the base64 string to bytes, extract the MIME type, and encode the byte array to a base64 string.
+
+4. **Mapper (`ImageMapper`):**
+   - Uses the helper class for custom mappings to convert the DTO to the entity and vice versa.
+
+5. **Service (`ImageService`):**
+   - Uses the mapper to convert the DTO to the entity for saving and the entity to the DTO for retrieving.
+
+6. **Controller (`ImageController`):**
+   - Accepts the DTO in the upload endpoint and returns the DTO in the get endpoint.
+
+This setup ensures that the image data is correctly mapped from the DTO to the entity and back using MapStruct and a helper class, allowing the frontend to receive and display the image correctly.
