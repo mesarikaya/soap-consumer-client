@@ -1,0 +1,197 @@
+To send the image back as a base64 string in the payload, including the MIME type, you can modify the response to encode the image bytes and include the MIME type in the returned string.
+
+Here's how you can achieve this:
+
+### 1. Update the Controller
+
+Modify the `getImage` endpoint to return the image as a base64 string with the MIME type included.
+
+```java
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Base64;
+import java.util.Optional;
+
+@RestController
+@RequestMapping("/api/images")
+public class ImageController {
+
+    @Autowired
+    private ImageService imageService;
+
+    @PostMapping("/upload")
+    public ResponseEntity<Long> uploadImage(@RequestBody String base64Image) {
+        ImageEntity imageEntity = imageService.saveImage(base64Image);
+        return ResponseEntity.ok(imageEntity.getId());
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<String> getImage(@PathVariable Long id) {
+        Optional<ImageEntity> imageEntityOptional = imageService.getImage(id);
+        if (imageEntityOptional.isPresent()) {
+            ImageEntity imageEntity = imageEntityOptional.get();
+            String base64Image = "data:" + imageEntity.getMimeType() + ";base64," + Base64.getEncoder().encodeToString(imageEntity.getImageData());
+            return ResponseEntity.ok(base64Image);
+        } else {
+            return ResponseEntity.notFound().build();
+        }
+    }
+}
+```
+
+### Explanation:
+
+1. **Upload Endpoint (`/upload`):**
+   - This endpoint remains the same. It accepts a base64 encoded image, strips the prefix, decodes it to bytes, and saves it in the database along with the MIME type.
+
+2. **Retrieve Endpoint (`/images/{id}`):**
+   - This endpoint retrieves the image data and MIME type from the database.
+   - It encodes the image bytes back to a base64 string and prepends the MIME type and base64 prefix (`data:<mimeType>;base64,`).
+   - The response body contains the base64 string with the MIME type.
+
+### Frontend Handling
+
+The frontend can now directly use the base64 string in an `img` tag. Here’s an example:
+
+```javascript
+fetch('/api/images/1')
+    .then(response => response.text())
+    .then(base64Image => {
+        const img = document.createElement('img');
+        img.src = base64Image;
+        document.body.appendChild(img);
+    })
+    .catch(error => {
+        console.error('There has been a problem with your fetch operation:', error);
+    });
+```
+
+### Full Example
+
+For completeness, here is the full example with all components:
+
+#### Image Entity
+
+```java
+import javax.persistence.*;
+
+@Entity
+public class ImageEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Lob
+    private byte[] imageData;
+
+    private String mimeType;
+
+    // Getters and setters
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public byte[] getImageData() {
+        return imageData;
+    }
+
+    public void setImageData(byte[] imageData) {
+        this.imageData = imageData;
+    }
+
+    public String getMimeType() {
+        return mimeType;
+    }
+
+    public void setMimeType(String mimeType) {
+        this.mimeType = mimeType;
+    }
+}
+```
+
+#### Image Repository
+
+```java
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface ImageRepository extends JpaRepository<ImageEntity, Long> {
+}
+```
+
+#### Image Service
+
+```java
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.util.Base64;
+import java.util.Optional;
+
+@Service
+public class ImageService {
+
+    @Autowired
+    private ImageRepository imageRepository;
+
+    public ImageEntity saveImage(String base64Image) {
+        String mimeType = base64Image.substring(base64Image.indexOf(":") + 1, base64Image.indexOf(";"));
+        String base64Data = base64Image.substring(base64Image.indexOf(",") + 1);
+
+        byte[] imageBytes = Base64.getDecoder().decode(base64Data);
+        ImageEntity imageEntity = new ImageEntity();
+        imageEntity.setImageData(imageBytes);
+        imageEntity.setMimeType(mimeType);
+        return imageRepository.save(imageEntity);
+    }
+
+    public Optional<ImageEntity> getImage(Long id) {
+        return imageRepository.findById(id);
+    }
+}
+```
+
+#### Image Controller
+
+```java
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Base64;
+import java.util.Optional;
+
+@RestController
+@RequestMapping("/api/images")
+public class ImageController {
+
+    @Autowired
+    private ImageService imageService;
+
+    @PostMapping("/upload")
+    public ResponseEntity<Long> uploadImage(@RequestBody String base64Image) {
+        ImageEntity imageEntity = imageService.saveImage(base64Image);
+        return ResponseEntity.ok(imageEntity.getId());
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<String> getImage(@PathVariable Long id) {
+        Optional<ImageEntity> imageEntityOptional = imageService.getImage(id);
+        if (imageEntityOptional.isPresent()) {
+            ImageEntity imageEntity = imageEntityOptional.get();
+            String base64Image = "data:" + imageEntity.getMimeType() + ";base64," + Base64.getEncoder().encodeToString(imageEntity.getImageData());
+            return ResponseEntity.ok(base64Image);
+        } else {
+            return ResponseEntity.notFound().build();
+        }
+    }
+}
+```
+
+This setup allows you to handle image uploads and retrievals, including the MIME type, using base64 encoding in a Spring Boot application. The frontend can directly use the base64 string received in the response to display the image.
