@@ -1,0 +1,16 @@
+<build>
+    <resources>
+        <resource>
+            <directory>src/main/resources</directory>
+            <includes>
+                <include>**/*</include>
+            </includes>
+            <!-- Optionally exclude files if needed -->
+            <!--
+            <excludes>
+                <exclude>some/excluded/path/**</exclude>
+            </excludes>
+            -->
+        </resource>
+    </resources>
+</build>
