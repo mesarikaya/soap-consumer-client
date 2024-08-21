@@ -1,3 +1,5 @@
+https://github.com/spring-projects/spring-amqp/issues/1309
+
 This is a common pattern where you have a sequence of operations involving database persistence, message sending via RabbitMQ, and then waiting for a response from another service before returning the result to the client.
 
 Given your setup, where you're facing issues related to "mandatory transactions," let me walk you through the steps and potential pitfalls:
