@@ -1,0 +1,101 @@
+Yes, you can absolutely use `@TransactionalEventListener` to handle the `afterCommit` logic within your state machine. This approach leverages Spring's event-driven architecture to decouple the transaction lifecycle from the message-sending logic, ensuring that the message to RabbitMQ is sent only after the transaction has been committed successfully.
+
+### How `@TransactionalEventListener` Works
+The `@TransactionalEventListener` annotation allows you to listen for events within a transactional context. You can specify that the event should only be processed after the transaction has committed, which is ideal for your scenario where you need to ensure that the entity has been fully saved and the transaction has completed before sending a message to RabbitMQ.
+
+### Implementing `@TransactionalEventListener` in Your Scenario
+
+#### 1. **Define a Custom Event**
+First, define an event class that will carry the necessary information (e.g., the entity) that needs to be processed after the commit:
+
+```java
+public class EntitySavedEvent {
+
+    private final YourEntity entity;
+
+    public EntitySavedEvent(YourEntity entity) {
+        this.entity = entity;
+    }
+
+    public YourEntity getEntity() {
+        return entity;
+    }
+}
+```
+
+#### 2. **Publish the Event After Saving**
+In your state machine or service where the entity is saved and the state transitions occur, publish this event after the entity is saved:
+
+```java
+@Service
+public class YourStateMachineService {
+
+    @Autowired
+    private YourRepository yourRepository;
+
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
+
+    @Transactional
+    public void executeStateMachine(YourEntity entity) {
+        // Initial save (state 1)
+        YourEntity savedEntity = yourRepository.save(entity);
+        
+        // State transitions and further saves
+        stateTransition(savedEntity);
+
+        // Publish event after saving
+        eventPublisher.publishEvent(new EntitySavedEvent(savedEntity));
+    }
+
+    private void stateTransition(YourEntity entity) {
+        // Example of a state transition with another save
+        entity.setState("NEW_STATE");
+        yourRepository.save(entity);
+
+        // Additional logic for state transitions...
+    }
+}
+```
+
+#### 3. **Handle the Event with `@TransactionalEventListener`**
+Now, create a listener method that will react to this event only after the transaction has been committed:
+
+```java
+@Component
+public class EntityEventListener {
+
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleEntitySavedEvent(EntitySavedEvent event) {
+        YourEntity entity = event.getEntity();
+        sendMessageToRabbitMQ(entity);
+    }
+
+    private void sendMessageToRabbitMQ(YourEntity entity) {
+        Message message = createMessage(entity);
+        rabbitTemplate.convertAndSend("exchange", "routingKey", message);
+    }
+
+    private Message createMessage(YourEntity entity) {
+        // Convert entity to a message
+        return MessageBuilder.withBody(entity.toString().getBytes())
+                             .setHeader("contentType", "application/json")
+                             .build();
+    }
+}
+```
+
+#### 4. **Advantages of Using `@TransactionalEventListener`**
+- **Decoupling**: Your transaction management and message sending logic are decoupled. This makes your code cleaner and easier to manage.
+- **Automatic Commit Handling**: The event listener will automatically only execute after the transaction is successfully committed, reducing the risk of sending a message for a transaction that might roll back.
+- **Flexibility**: The `@TransactionalEventListener` allows you to easily extend the functionality if more actions need to happen after a commit.
+
+### 5. **Testing**
+- **Unit Tests**: You can unit test the event publishing and listening separately. Mocking the `ApplicationEventPublisher` and `RabbitTemplate` will allow you to verify that the event is published and the message is sent correctly.
+- **Integration Tests**: Perform full integration tests to ensure that the entire flow, from saving the entity to sending the message, works as expected in a real transactional context.
+
+### Summary
+Using `@TransactionalEventListener` in your Spring Boot project is a robust way to handle operations that need to occur after a transaction commits, such as sending a message to RabbitMQ. This approach ensures that your message is sent only after the database transaction is successfully completed, making your system more reliable and easier to maintain.
