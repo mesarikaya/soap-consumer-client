@@ -1,0 +1,116 @@
+Om SonarQube lokaal op te zetten en het te integreren met je GitLab CI/CD-pipeline voor een Spring Boot-project, kun je de volgende stappen volgen:
+
+### Stap 1: Installeer SonarQube met Docker
+
+1. **SonarQube draaien met Docker**:
+   
+   Start een SonarQube-server en een bijbehorende database (PostgreSQL) met behulp van Docker:
+
+   ```bash
+   docker network create sonarnet
+
+   docker run -d --name sonarqube-db --network sonarnet \
+     -e POSTGRES_USER=sonar \
+     -e POSTGRES_PASSWORD=sonar \
+     -e POSTGRES_DB=sonarqube \
+     postgres:latest
+
+   docker run -d --name sonarqube --network sonarnet -p 9000:9000 \
+     -e SONAR_JDBC_URL=jdbc:postgresql://sonarqube-db:5432/sonarqube \
+     -e SONAR_JDBC_USERNAME=sonar \
+     -e SONAR_JDBC_PASSWORD=sonar \
+     sonarqube:latest
+   ```
+
+   - **sonarnet**: Een Docker-netwerk om SonarQube en de database met elkaar te laten communiceren.
+   - **sonarqube-db**: Draait de PostgreSQL-database voor SonarQube.
+   - **sonarqube**: Draait de SonarQube-server.
+
+2. **SonarQube openen**:
+   - SonarQube draait nu op `http://localhost:9000`. Je kunt inloggen met de standaard credentials: `admin/admin`.
+
+### Stap 2: Configureer SonarQube
+
+1. **Maak een nieuw project aan**:
+   - Log in op SonarQube.
+   - Ga naar "Projects" > "Create new project".
+   - Geef het project een naam en genereer een **token**. Noteer dit token; je hebt het nodig om de SonarQube-scanner te configureren.
+
+2. **Installeer SonarScanner lokaal**:
+   - Download en installeer de [SonarScanner](https://docs.sonarqube.org/latest/analysis/scan/sonarscanner/) op je machine. Dit zal gebruikt worden in je CI/CD-pipeline om de code te analyseren.
+
+### Stap 3: Integreer SonarQube in je GitLab CI/CD Pipeline
+
+1. **Voeg SonarQube-aanroepen toe aan je `.gitlab-ci.yml`**:
+   
+   Update je `.gitlab-ci.yml` om SonarQube-analyse toe te voegen aan de pipeline:
+
+   ```yaml
+   image: maven:3.8.5-jdk-11
+
+   stages:
+     - build
+     - test
+     - sonar
+
+   build:
+     stage: build
+     script:
+       - mvn clean package
+     artifacts:
+       paths:
+         - target/*.jar
+
+   test:
+     stage: test
+     script:
+       - mvn test
+
+   sonar:
+     stage: sonar
+     script:
+       - mvn sonar:sonar -Dsonar.projectKey=<your_project_key> -Dsonar.host.url=http://<your_sonarqube_server>:9000 -Dsonar.login=<your_sonarqube_token>
+   ```
+
+   - **sonar.projectKey**: Vervang `<your_project_key>` door de projectnaam die je in SonarQube hebt aangemaakt.
+   - **sonar.host.url**: Vervang `<your_sonarqube_server>` door `localhost` als je SonarQube lokaal draait.
+   - **sonar.login**: Vervang `<your_sonarqube_token>` door het token dat je in SonarQube hebt gegenereerd.
+
+2. **Installeer de SonarQube Maven plugin**:
+   
+   Zorg ervoor dat je `pom.xml` de SonarQube Maven plugin bevat:
+
+   ```xml
+   <properties>
+       <sonar.projectKey>your_project_key</sonar.projectKey>
+       <sonar.host.url>http://localhost:9000</sonar.host.url>
+       <sonar.login>your_sonarqube_token</sonar.login>
+   </properties>
+
+   <build>
+       <plugins>
+           <plugin>
+               <groupId>org.sonarsource.scanner.maven</groupId>
+               <artifactId>sonar-maven-plugin</artifactId>
+               <version>3.9.1.2184</version>
+           </plugin>
+       </plugins>
+   </build>
+   ```
+
+   Vervang de placeholders met je eigen project key en SonarQube server details.
+
+### Stap 4: Run de CI/CD Pipeline
+
+1. **Push naar GitLab**:
+   
+   Push je `.gitlab-ci.yml` en eventuele wijzigingen in je `pom.xml` naar GitLab.
+
+2. **Pipeline Controle**:
+
+   - De CI/CD-pipeline zou nu de SonarQube-analyse moeten uitvoeren na het bouwen en testen van je project.
+   - Je kunt de resultaten bekijken in SonarQube onder je project op `http://localhost:9000`.
+
+Nu heb je een lokale SonarQube setup geïntegreerd met je GitLab CI/CD-pipeline voor je Spring Boot-project. Je kunt nu de codekwaliteit en technische schuld van je project monitoren via SonarQube.
+
+Laat me weten als je nog verdere hulp nodig hebt!
