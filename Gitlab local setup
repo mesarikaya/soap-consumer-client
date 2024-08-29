@@ -1,0 +1,91 @@
+Als je geen eigen GitLab-server draait en gewoon een bestaande GitLab-host (zoals gitlab.com) wilt gebruiken met een GitLab Runner op je lokale machine, kun je de GitLab Runner direct registreren en gebruiken zonder een eigen GitLab instance te draaien. Hieronder staan de stappen:
+
+### Stap 1: Installeer Docker en GitLab Runner
+
+1. **Installeer Docker** (indien nog niet geïnstalleerd):
+   - Volg de [Docker installatiedocumentatie](https://docs.docker.com/get-docker/) voor jouw besturingssysteem.
+
+2. **Installeer GitLab Runner** als Docker container:
+
+   ```bash
+   docker run -d --name gitlab-runner --restart always \
+     -v /srv/gitlab-runner/config:/etc/gitlab-runner \
+     -v /var/run/docker.sock:/var/run/docker.sock \
+     gitlab/gitlab-runner:latest
+   ```
+
+   - Dit start de GitLab Runner container en maakt een configuratievolume aan in `/srv/gitlab-runner/config`.
+
+### Stap 2: Registreer de GitLab Runner
+
+1. **Verkrijg een registratie-token**:
+   - Ga naar je project op GitLab (bijvoorbeeld op gitlab.com).
+   - Ga naar `Settings > CI/CD > Runners` en zoek de "Specific Runners" sectie.
+   - Klik op "Register an instance" en kopieer het registratie-token.
+
+2. **Registreer de Runner** met je GitLab-project:
+
+   ```bash
+   docker run --rm -v /srv/gitlab-runner/config:/etc/gitlab-runner gitlab/gitlab-runner register
+   ```
+
+   - **GitLab instance URL**: Voer de URL van je GitLab-host in (bijvoorbeeld `https://gitlab.com`).
+   - **Registration token**: Plak het registratie-token dat je eerder hebt gekopieerd.
+   - **Beschrijving**: Geef een beschrijving voor je Runner, zoals "Local Docker Runner".
+   - **Tags**: Voeg eventueel tags toe (bijvoorbeeld `docker`, `local`).
+   - **Executor** type: Kies `docker`.
+   - **Docker image**: Selecteer bijvoorbeeld `openjdk:11` als je met Java werkt.
+
+### Stap 3: Maak een eenvoudig Spring Boot Project en .gitlab-ci.yml
+
+1. **Maak een nieuw Java Spring Boot project**:
+   - Gebruik [Spring Initializr](https://start.spring.io/) om een basisproject te genereren met Maven en Java.
+
+2. **Maak een `.gitlab-ci.yml` bestand**:
+
+   Voeg een `.gitlab-ci.yml` toe aan de root van je project met de volgende inhoud:
+
+   ```yaml
+   image: openjdk:11
+
+   stages:
+     - build
+     - test
+
+   build:
+     stage: build
+     script:
+       - ./mvnw clean package
+     artifacts:
+       paths:
+         - target/*.jar
+
+   test:
+     stage: test
+     script:
+       - ./mvnw test
+   ```
+
+   Dit definieert een CI/CD pipeline met een build- en testfase.
+
+### Stap 4: Push je project naar GitLab en voer de pipeline uit
+
+1. **Push je project naar GitLab**:
+
+   Zorg ervoor dat je project in een GitLab repository staat. Als je dit nog niet hebt gedaan:
+
+   ```bash
+   git init
+   git remote add origin <your-gitlab-repo-url>
+   git add .
+   git commit -m "Initial commit"
+   git push -u origin master
+   ```
+
+2. **Pipeline Uitvoeren**:
+
+   - Ga naar je project op GitLab en kijk onder `CI/CD > Pipelines`.
+   - Je zou de pipeline automatisch moeten zien starten na het pushen.
+   - De pipeline zal de build- en teststappen uitvoeren op je lokale GitLab Runner.
+
+Nu heb je een lokale GitLab Runner die wordt gebruikt door je project op GitLab.com of een andere GitLab-host, en voert de CI/CD pipeline uit voor je Spring Boot "Hello World" applicatie. Laat het me weten als je nog vragen hebt!
