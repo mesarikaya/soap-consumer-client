@@ -1,0 +1,142 @@
+If you're encountering a **CPU issue during job preparation** in GitLab CI, it's likely related to insufficient resources on the runner. This can happen if the GitLab CI runner is running in a shared environment with limited CPU or if the Docker container used by the job exceeds the available resources.
+
+Here are a few steps and strategies to troubleshoot and resolve CPU issues during job preparation:
+
+### 1. **Limit CPU Usage in Your Jobs**
+You can limit the CPU usage for your jobs by configuring the `resource_group` or specifying resource limits in the runner configuration. If you're using Docker-based runners, you can also limit the CPU usage directly in the `docker` section of your jobs.
+
+#### Example: Limiting CPU Usage in a Job
+
+You can use the `docker` option in your GitLab job to limit CPU usage by passing flags to the Docker executor.
+
+```yaml
+maven_build:
+  stage: build
+  image: maven:3.8.4-jdk-11
+  script:
+    - echo "Running Maven build"
+    - mvn clean install -DskipTests
+  tags:
+    - docker
+  services:
+    - name: docker:stable
+      entrypoint: ["/bin/sh", "-c"]
+      command: ["--cpus=2"]  # Limit the job to 2 CPUs
+```
+
+In this example, the `--cpus=2` limits the job to use 2 CPUs.
+
+### 2. **Use `resource_group` for Exclusive Job Execution**
+If the issue occurs because too many jobs are running simultaneously and consuming too many CPU resources, you can ensure that jobs are run sequentially by using a `resource_group` in GitLab. This will ensure that only one job in the group runs at a time.
+
+#### Example:
+
+```yaml
+maven_build:
+  stage: build
+  resource_group: maven_build_group  # Ensures jobs are run one at a time
+  script:
+    - echo "Running Maven build"
+    - mvn clean install -DskipTests
+```
+
+This will ensure that only one job in the `maven_build_group` runs at any given time, helping to reduce the CPU load.
+
+### 3. **Increase Runner Resources**
+If you're using a **self-hosted runner**, you can increase the CPU and memory resources allocated to your runner. This is particularly important if the runner is being used to build resource-intensive applications like Java projects with Maven or Docker images with Kaniko.
+
+#### On a Docker-based runner:
+If you have a Docker-based runner, you can configure the `concurrent` and `limit` settings in your runner configuration file (`config.toml`).
+
+1. Open your runner's `config.toml` file.
+2. Find the `[runners]` section and modify the `concurrent` and resource limits.
+
+```toml
+[[runners]]
+  name = "docker-runner"
+  url = "https://gitlab.com/"
+  token = "your-token"
+  executor = "docker"
+  limit = 2  # Limit the number of concurrent jobs on this runner
+  environment = ["DOCKER_DRIVER=overlay2"]
+
+  [runners.docker]
+    memory = "4g"  # Set memory limit to 4GB
+    cpus = "2"     # Set CPU limit to 2 CPUs
+    image = "maven:3.8.4-jdk-11"
+```
+
+This will limit the number of concurrent jobs and specify the available CPU and memory resources.
+
+### 4. **Use Smaller Base Images**
+If you're using large Docker images for your builds (e.g., Maven with JDK, Kaniko), you may want to use smaller, more lightweight images to reduce the CPU load during job preparation.
+
+For example, instead of using a full JDK image, you could use an **Alpine-based** Maven image, which is smaller and more efficient.
+
+#### Example:
+
+```yaml
+maven_build:
+  stage: build
+  image: maven:3.8.4-jdk-11-slim  # Use a lighter version of the Maven image
+  script:
+    - echo "Running Maven build"
+    - mvn clean install -DskipTests
+```
+
+### 5. **Check and Adjust GitLab Runner Configuration**
+If you're using shared runners provided by GitLab.com, you might experience resource contention with other users. In this case, either try to:
+
+- **Switch to a private runner** with more resources.
+- **Use GitLab's premium tier**, which provides more resource allocations.
+
+If you're managing your own GitLab runners, consider increasing the **CPU quota** and **memory** allocated to the runner by modifying the Docker or Kubernetes configurations used by the runner.
+
+### 6. **Use `cache` and `artifacts` Wisely**
+Minimize the amount of work that needs to be done during each job by properly caching dependencies like Maven `.m2` directory and using `artifacts` to pass along built assets between stages. This reduces the job's overall CPU and resource consumption by not re-downloading or re-building everything from scratch.
+
+#### Example:
+
+```yaml
+maven_build:
+  stage: build
+  image: maven:3.8.4-jdk-11
+  cache:
+    paths:
+      - .m2/repository
+  script:
+    - echo "Running Maven build"
+    - mvn clean install -DskipTests
+```
+
+### 7. **Split Large Jobs into Smaller Ones**
+If your jobs are performing multiple heavy tasks (e.g., Maven build and Docker build in the same job), you can split them into separate jobs to reduce CPU usage and distribute the workload across different stages.
+
+#### Example:
+
+```yaml
+maven_build:
+  stage: build
+  image: maven:3.8.4-jdk-11
+  script:
+    - echo "Running Maven build"
+    - mvn clean install -DskipTests
+
+docker_build:
+  stage: docker
+  image: gcr.io/kaniko-project/executor:debug
+  script:
+    - echo "Building Docker image with Kaniko"
+    - |
+      /kaniko/executor
+      --context $CI_PROJECT_DIR
+      --dockerfile $CI_PROJECT_DIR/Dockerfile
+      --destination $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+```
+
+By splitting tasks, you make better use of parallelization while reducing CPU consumption per job.
+
+---
+
+### Conclusion
+CPU issues during job preparation are typically caused by insufficient resources or overloading the runner. By limiting CPU usage, using smaller base images, splitting heavy jobs, caching dependencies, and adjusting runner configurations, you can resolve these issues and ensure your GitLab CI pipeline runs smoothly.
