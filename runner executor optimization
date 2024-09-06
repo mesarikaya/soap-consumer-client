@@ -1,0 +1,208 @@
+Setting up a **GitLab Runner with the Kubernetes executor** allows you to run CI/CD jobs in Kubernetes pods, providing scalability, isolation, and resource management benefits. Each job is executed in its own dynamically provisioned pod, which means Kubernetes handles scaling and resource allocation.
+
+Below is a comprehensive guide to setting up **GitLab Runner with Kubernetes executor**:
+
+### Prerequisites:
+1. **GitLab account** and a **GitLab project** where you want to set up CI/CD.
+2. **Kubernetes cluster** (you can use any cloud provider such as Google Kubernetes Engine (GKE), Amazon EKS, Azure AKS, or a self-hosted cluster).
+3. **Kubectl** and **helm** (or any other Kubernetes package manager) installed locally.
+4. Admin privileges on the Kubernetes cluster to install and manage resources.
+
+### Step 1: Install GitLab Runner in Kubernetes
+
+You will install GitLab Runner using **Helm**, which simplifies the deployment and management of Kubernetes applications.
+
+#### Add the GitLab Helm Repository:
+
+```bash
+helm repo add gitlab https://charts.gitlab.io
+helm repo update
+```
+
+#### Create a Namespace for GitLab Runner:
+
+```bash
+kubectl create namespace gitlab-runner
+```
+
+#### Install the GitLab Runner:
+
+```bash
+helm install gitlab-runner gitlab/gitlab-runner --namespace gitlab-runner
+```
+
+This will install the runner in the `gitlab-runner` namespace with default settings. However, for more specific configurations (like using Kubernetes executor), we need to modify the Helm installation.
+
+### Step 2: Configure GitLab Runner with Kubernetes Executor
+
+To set up the Kubernetes executor, you need to configure certain parameters while installing the runner. You can either modify the Helm chart's `values.yaml` file or pass these configurations directly using the `--set` option in Helm.
+
+#### Example: Helm Installation with Kubernetes Executor Config
+
+```bash
+helm install gitlab-runner gitlab/gitlab-runner \
+  --namespace gitlab-runner \
+  --set gitlabUrl=https://gitlab.com/ \
+  --set runnerRegistrationToken=<YOUR_REGISTRATION_TOKEN> \
+  --set runners.executor=kubernetes \
+  --set runners.namespace=gitlab-runner \
+  --set runners.kubernetes.image=maven:3.6.3-jdk-11 \
+  --set runners.kubernetes.privileged=true \
+  --set runners.kubernetes.poll_timeout=600 \
+  --set runners.kubernetes.resources.requests.cpu=500m \
+  --set runners.kubernetes.resources.requests.memory=512Mi \
+  --set runners.kubernetes.resources.limits.cpu=1 \
+  --set runners.kubernetes.resources.limits.memory=1024Mi
+```
+
+Explanation of key settings:
+- **`gitlabUrl`**: URL to your GitLab instance (use `https://gitlab.com/` for GitLab.com or your self-hosted instance).
+- **`runnerRegistrationToken`**: Registration token for your GitLab project or group. You can get this from the GitLab project under **Settings > CI / CD > Runners**.
+- **`runners.executor=kubernetes`**: Specifies that the Kubernetes executor is used.
+- **`runners.namespace`**: The Kubernetes namespace where jobs will be executed.
+- **`runners.kubernetes.image`**: Default Docker image for jobs (you can specify a default base image like `alpine`, `maven`, etc.).
+- **`runners.kubernetes.privileged=true`**: Enable privileged mode for Docker-in-Docker (DinD) if your jobs need to build Docker images.
+- **`runners.kubernetes.resources.requests`**: Minimum resource requests for CPU and memory.
+- **`runners.kubernetes.resources.limits`**: Maximum CPU and memory limits per job.
+
+#### Alternative: Use a YAML configuration file
+
+Instead of passing configurations via the command line, you can create a `values.yaml` file and customize the runner settings:
+
+```yaml
+gitlabUrl: https://gitlab.com/
+runnerRegistrationToken: <YOUR_REGISTRATION_TOKEN>
+runners:
+  executor: kubernetes
+  namespace: gitlab-runner
+  builds:
+    cpuLimit: "1000m"
+    memoryLimit: "1024Mi"
+  services:
+    cpuLimit: "500m"
+    memoryLimit: "512Mi"
+  helpers:
+    cpuLimit: "100m"
+    memoryLimit: "128Mi"
+  kubernetes:
+    image: maven:3.6.3-jdk-11  # Default image for jobs
+    privileged: true  # Needed for Docker-in-Docker (DinD)
+    poll_timeout: 600  # Timeout for Kubernetes jobs
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1024Mi
+```
+
+Then, install using this `values.yaml` file:
+
+```bash
+helm install gitlab-runner gitlab/gitlab-runner --namespace gitlab-runner -f values.yaml
+```
+
+### Step 3: Register the Runner with GitLab
+
+If you haven’t passed the `runnerRegistrationToken` during installation, you can manually register the runner by following these steps:
+
+1. Get the GitLab Runner pod name:
+
+```bash
+kubectl get pods -n gitlab-runner
+```
+
+2. Enter the runner pod to run the registration command:
+
+```bash
+kubectl exec -it <runner-pod-name> -n gitlab-runner -- gitlab-runner register
+```
+
+Follow the prompts:
+- **GitLab instance URL**: e.g., `https://gitlab.com/`.
+- **Registration token**: Get this from your project under **Settings > CI / CD > Runners**.
+- **Description**: Name your runner, e.g., "Kubernetes Runner".
+- **Tags**: Specify tags that you will use to reference this runner, e.g., `k8s`.
+- **Executor**: Choose `kubernetes`.
+
+### Step 4: Configure CI/CD Pipeline in `.gitlab-ci.yml`
+
+Now that the runner is set up, you can configure your pipeline in your GitLab project’s `.gitlab-ci.yml`. GitLab will automatically use the Kubernetes executor to run jobs in Kubernetes pods.
+
+#### Example `.gitlab-ci.yml`:
+
+```yaml
+stages:
+  - build
+  - test
+  - deploy
+
+build:
+  stage: build
+  image: maven:3.6.3-jdk-11
+  script:
+    - mvn clean install
+  tags:
+    - k8s
+
+test:
+  stage: test
+  image: openjdk:11
+  script:
+    - echo "Running tests"
+    - mvn test
+  tags:
+    - k8s
+
+deploy:
+  stage: deploy
+  image: alpine:latest
+  script:
+    - echo "Deploying application"
+  tags:
+    - k8s
+```
+
+In this example:
+- Jobs are tagged with `k8s` to ensure they run on the Kubernetes executor runner.
+- Different stages (`build`, `test`, `deploy`) can use different Docker images depending on your requirements.
+
+### Step 5: Monitor and Scale Runners
+
+Kubernetes makes scaling easy. If you need more runner pods to handle an increased load, you can scale the runner deployment:
+
+#### Manually scale the runner deployment:
+```bash
+kubectl scale deployment gitlab-runner --replicas=3 -n gitlab-runner
+```
+
+#### Use Horizontal Pod Autoscaling (HPA):
+
+To automatically scale runners based on CPU usage, enable **Horizontal Pod Autoscaler** (HPA) in Kubernetes. Here’s an example configuration for scaling based on CPU usage:
+
+```bash
+kubectl autoscale deployment gitlab-runner --cpu-percent=50 --min=1 --max=10 -n gitlab-runner
+```
+
+This will automatically scale the runner between 1 and 10 pods depending on CPU usage.
+
+### Step 6: Check Runner Logs and Pods
+
+To view the logs of a runner:
+
+```bash
+kubectl logs <runner-pod-name> -n gitlab-runner
+```
+
+To view the running jobs (pods):
+
+```bash
+kubectl get pods -n gitlab-runner
+```
+
+### Conclusion
+
+Setting up a GitLab Runner with the Kubernetes executor allows you to dynamically scale your CI/CD workloads, isolate jobs in individual pods, and manage resources more efficiently. By leveraging Kubernetes' auto-scaling capabilities, you can handle large and complex CI/CD pipelines without manual intervention.
+
+This setup is ideal for teams running frequent CI/CD jobs, working with microservices, or building containerized applications where scalability and resource management are crucial.
