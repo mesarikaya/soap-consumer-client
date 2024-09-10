@@ -1,0 +1,231 @@
+If you have several servers, each handling a specific type and performing the necessary database calls and transformations, you need to dynamically route requests to the appropriate gRPC server based on the type of data. Here’s how you can approach this scenario:
+
+### 1. **Architecture Overview**
+
+- **gRPC Servers**: Each server handles a specific type of entity, fetching and transforming data as required.
+- **gRPC Client**: The client (search service) dynamically selects the appropriate server based on the type.
+- **Search Service**: Calls the gRPC client with IDs, processes the response, and enriches the data.
+
+### 2. **gRPC Definitions**
+
+Assuming your `grpc_service.proto` remains unchanged:
+
+```proto
+syntax = "proto3";
+
+package grpc;
+
+message GrpcRequest {
+  repeated string ids = 1;  // List of IDs
+}
+
+message GrpcResponse {
+  map<string, map<string, string>> fields = 1;  // ID to field map
+}
+
+service EntityService {
+  rpc FetchEntities(GrpcRequest) returns (GrpcResponse);
+}
+```
+
+### 3. **gRPC Server Implementations**
+
+You’ll have multiple implementations for different types.
+
+**Example for TypeA Server**:
+
+**TypeAServiceImpl.java**
+
+```java
+package com.example.grpc.typea;
+
+import com.example.grpc.GrpcRequest;
+import com.example.grpc.GrpcResponse;
+import com.example.grpc.EntityServiceGrpc;
+import io.grpc.stub.StreamObserver;
+import net.devh.boot.grpc.server.service.GrpcService;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@GrpcService
+public class TypeAServiceImpl extends EntityServiceGrpc.EntityServiceImplBase {
+
+    @Autowired
+    private TypeARepository typeARepository;
+
+    @Override
+    public void fetchEntities(GrpcRequest request, StreamObserver<GrpcResponse> responseObserver) {
+        List<String> ids = request.getIdsList();
+
+        Map<String, Map<String, String>> results = new HashMap<>();
+        typeARepository.findAllById(ids).forEach(entity -> {
+            Map<String, String> entityData = new HashMap<>();
+            entityData.put("name", entity.getName());
+            entityData.put("description", entity.getDescription());
+            results.put(entity.getId(), entityData);
+        });
+
+        GrpcResponse response = GrpcResponse.newBuilder().putAllFields(results).build();
+        responseObserver.onNext(response);
+        responseObserver.onCompleted();
+    }
+}
+```
+
+**TypeBServiceImpl.java**
+
+Similar to `TypeAServiceImpl`, but handles `TypeB` entities.
+
+### 4. **gRPC Client Configuration in Search Service**
+
+You’ll need to configure multiple gRPC clients for different types of servers and route requests accordingly.
+
+**GrpcClientService.java**
+
+```java
+package com.example.search.grpc;
+
+import com.example.grpc.GrpcRequest;
+import com.example.grpc.GrpcResponse;
+import com.example.grpc.EntityServiceGrpc;
+import net.devh.boot.grpc.client.inject.GrpcClient;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@Service
+public class GrpcClientService {
+
+    @GrpcClient("typeAService")
+    private EntityServiceGrpc.EntityServiceBlockingStub typeAClient;
+
+    @GrpcClient("typeBService")
+    private EntityServiceGrpc.EntityServiceBlockingStub typeBClient;
+
+    @Value("${grpc.service.typeA.address}")
+    private String typeAAddress;
+
+    @Value("${grpc.service.typeB.address}")
+    private String typeBAddress;
+
+    public Map<String, Object> fetchDataByIds(List<String> ids, String type) {
+        EntityServiceGrpc.EntityServiceBlockingStub client = selectClient(type);
+        if (client == null) {
+            throw new IllegalArgumentException("No client configured for type: " + type);
+        }
+
+        GrpcRequest request = GrpcRequest.newBuilder().addAllIds(ids).build();
+        GrpcResponse response = client.fetchEntities(request);
+        return convertGrpcResponseToMap(response);
+    }
+
+    private EntityServiceGrpc.EntityServiceBlockingStub selectClient(String type) {
+        switch (type) {
+            case "typeA":
+                return typeAClient;
+            case "typeB":
+                return typeBClient;
+            default:
+                return null;
+        }
+    }
+
+    private Map<String, Object> convertGrpcResponseToMap(GrpcResponse response) {
+        Map<String, Object> resultMap = new HashMap<>();
+        response.getFieldsMap().forEach((key, value) -> resultMap.put(key, value));
+        return resultMap;
+    }
+}
+```
+
+### 5. **Search Service**
+
+Update your search service to use the gRPC client to call the appropriate service based on the type.
+
+**SearchController.java**
+
+```java
+package com.example.search;
+
+import com.example.search.grpc.GrpcClientService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@RestController
+@RequestMapping("/search")
+public class SearchController {
+
+    @Autowired
+    private GrpcClientService grpcClientService;
+
+    @Autowired
+    private ElasticSearchService elasticSearchService;
+
+    @GetMapping("/resources")
+    public Page<Result> getResources(@RequestParam("query") String query, Pageable pageable) {
+        // Fetch search results from ElasticSearch
+        Page<Result> searchResults = elasticSearchService.search(query, pageable);
+
+        // Collect IDs and types
+        List<String> ids = searchResults.getContent().stream()
+            .map(result -> result.get("id").toString())
+            .collect(Collectors.toList());
+
+        // Fetch data from gRPC services
+        Map<String, Object> grpcData = searchResults.getContent().stream()
+            .collect(Collectors.groupingBy(
+                result -> result.get("type").toString(),
+                Collectors.mapping(result -> grpcClientService.fetchDataByIds(ids, result.get("type").toString()), Collectors.toMap(data -> data.get("id").toString(), data -> data))
+            ));
+
+        // Enrich results
+        searchResults.getContent().forEach(result -> {
+            String id = result.get("id").toString();
+            String type = result.get("type").toString();
+            if (grpcData.containsKey(type) && grpcData.get(type).containsKey(id)) {
+                result.put("grpcData", grpcData.get(type).get(id));
+            }
+        });
+
+        return searchResults;
+    }
+}
+```
+
+### 6. **Application Configuration**
+
+**application.yml**
+
+Configure the gRPC clients with their respective addresses:
+
+```yaml
+grpc:
+  clients:
+    typeAService:
+      address: "localhost:9091"  # Address for Type A service
+    typeBService:
+      address: "localhost:9092"  # Address for Type B service
+```
+
+### Conclusion
+
+1. **gRPC Servers**: Each server handles a specific type and performs the necessary database operations and transformations.
+2. **gRPC Client**: The search service dynamically routes requests to the appropriate gRPC server based on the type.
+3. **Search Service**: Collects results from Elasticsearch, fetches additional data from the appropriate gRPC server, and enriches the results before returning them.
+
+This setup allows for scalable and type-specific handling of entities with separate servers for each type, ensuring that each server focuses on its own domain logic.
