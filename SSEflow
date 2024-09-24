@@ -1,0 +1,298 @@
+Below is the complete solution for implementing Server-Sent Events (SSE) with Spring, where the token is extracted from Spring Security's context. This solution includes all required components:
+
+1. Controller: Handles incoming HTTP requests from the frontend.
+
+
+2. Services: Manages subscribers, SseEmitters, and their lifecycle.
+
+
+3. Security: Ensures token-based authentication with Spring Security, including extracting the token or user details from the security context.
+
+
+4. Entities: Basic classes like Subscriber to handle user-specific SSE emitters.
+
+
+
+Full Solution Breakdown:
+
+
+---
+
+1. Subscriber Class
+
+This class stores the username and SseEmitter for each subscriber.
+
+public class Subscriber {
+    private String username;
+    private SseEmitter sseEmitter;
+
+    public Subscriber(String username) {
+        this.username = username;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public SseEmitter getSseEmitter() {
+        return sseEmitter;
+    }
+
+    public void setSseEmitter(SseEmitter sseEmitter) {
+        this.sseEmitter = sseEmitter;
+    }
+}
+
+
+---
+
+2. SseService Class
+
+The service manages a thread-safe ConcurrentHashMap that stores Subscriber objects, keyed by their UUID.
+
+import org.springframework.stereotype.Service;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+@Service
+public class SseService {
+    private final ConcurrentHashMap<String, Subscriber> subscribers = new ConcurrentHashMap<>();
+
+    public String addSubscriber(String username) {
+        String uuid = UUID.randomUUID().toString();
+        subscribers.put(uuid, new Subscriber(username));
+        return uuid;
+    }
+
+    public void assignEmitterToSubscriber(String uuid, SseEmitter emitter) {
+        Subscriber subscriber = subscribers.get(uuid);
+        if (subscriber != null) {
+            subscriber.setSseEmitter(emitter);
+        }
+    }
+
+    public SseEmitter getEmitterByUUID(String uuid) {
+        Subscriber subscriber = subscribers.get(uuid);
+        return (subscriber != null) ? subscriber.getSseEmitter() : null;
+    }
+
+    public void removeSubscriber(String uuid) {
+        subscribers.remove(uuid);
+    }
+}
+
+
+---
+
+3. SseEmitterService Class
+
+This service manages the lifecycle of SseEmitter objects, creating emitters and handling timeouts, completion, and errors.
+
+import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import java.io.IOException;
+
+@Service
+public class SseEmitterService {
+
+    private final SseService sseService;
+
+    public SseEmitterService(SseService sseService) {
+        this.sseService = sseService;
+    }
+
+    public SseEmitter createEmitter(String uuid) {
+        SseEmitter emitter = new SseEmitter(30 * 60 * 1000L);  // 30 minutes timeout
+
+        emitter.onTimeout(() -> {
+            sseService.removeSubscriber(uuid);
+            emitter.complete();
+            System.out.println("Emitter timed out for UUID: " + uuid);
+        });
+
+        emitter.onCompletion(() -> {
+            sseService.removeSubscriber(uuid);
+            System.out.println("Emitter completed for UUID: " + uuid);
+        });
+
+        emitter.onError(e -> {
+            sseService.removeSubscriber(uuid);
+            System.out.println("Emitter error for UUID: " + uuid);
+        });
+
+        return emitter;
+    }
+
+    public void sendConnectedEvent(SseEmitter emitter) {
+        try {
+            emitter.send(SseEmitter.event().name("CONNECTED").data("Connection established"));
+        } catch (IOException e) {
+            emitter.completeWithError(e);
+        }
+    }
+
+    public void sendEvent(SseEmitter emitter, String eventName, Object data) {
+        try {
+            emitter.send(SseEmitter.event().name(eventName).data(data));
+        } catch (IOException e) {
+            emitter.completeWithError(e);
+        }
+    }
+}
+
+
+---
+
+4. SseController Class
+
+This controller handles the subscription endpoints. The token is extracted from the Spring Security context rather than being passed directly from the frontend.
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+@RestController
+@RequestMapping("/subscribe")
+public class SseController {
+
+    @Autowired
+    private SseService sseService;
+
+    @Autowired
+    private SseEmitterService sseEmitterService;
+
+    // Step 1: Subscribe with a token, but the token is now extracted from Spring Security context
+    @PostMapping
+    public ResponseEntity<String> subscribeWithToken() {
+        // Extract username or token from the Spring Security context
+        String username = extractUsernameFromSecurityContext();
+
+        // Generate UUID and add the subscriber
+        String uuid = sseService.addSubscriber(username);
+
+        // Return the URL for the client to call
+        String subscribeUrl = "/subscribe/" + uuid;
+        return ResponseEntity.ok(subscribeUrl);
+    }
+
+    // Step 2: Frontend subscribes to SSE by UUID
+    @GetMapping("/{uuid}")
+    public SseEmitter subscribeToSSE(@PathVariable("uuid") String uuid) {
+        SseEmitter emitter = sseEmitterService.createEmitter(uuid);
+
+        sseService.assignEmitterToSubscriber(uuid, emitter);
+        sseEmitterService.sendConnectedEvent(emitter);
+
+        return emitter;
+    }
+
+    // Helper method to extract the username from Spring Security context
+    private String extractUsernameFromSecurityContext() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        // If using JWT-based authentication
+        if (authentication.getPrincipal() instanceof Jwt) {
+            Jwt jwt = (Jwt) authentication.getPrincipal();
+            return jwt.getClaimAsString("username");  // Adjust claim as needed
+        }
+
+        // If using UserDetails
+        if (authentication.getPrincipal() instanceof UserDetails) {
+            UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+            return userDetails.getUsername();
+        }
+
+        return authentication.getName();  // Fallback
+    }
+}
+
+
+---
+
+5. Security Configuration
+
+Here’s a basic example of configuring Spring Security to support token-based authentication, such as with JWT. This ensures that Spring populates the SecurityContext with the authenticated user’s details.
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.web.SecurityFilterChain;
+
+@EnableWebSecurity
+public class SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+            .authorizeHttpRequests(authz -> authz
+                .anyRequest().authenticated()
+            )
+            .oauth2ResourceServer(oauth2 -> oauth2.jwt());  // Assuming JWT is being used for auth
+
+        return http.build();
+    }
+
+    private JwtAuthenticationConverter jwtAuthenticationConverter() {
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+        // Customize JWT conversion to extract roles or other claims if necessary
+        return converter;
+    }
+}
+
+
+---
+
+6. Frontend Workflow (Overview)
+
+1. Frontend calls /subscribe (POST):
+
+No need to pass a token explicitly since the backend extracts it from the Spring Security context.
+
+The backend generates a UUID and returns a URL like /subscribe/{UUID}.
+
+
+
+2. Frontend calls /subscribe/{UUID} (GET):
+
+This call establishes the SSE connection using the UUID returned in the previous step.
+
+The backend assigns the SseEmitter and begins streaming events.
+
+
+
+
+
+---
+
+Workflow Summary:
+
+1. Token Handling: The token is extracted from the SecurityContext on the server side. The frontend does not need to send the token explicitly in the subscription request, which makes the solution cleaner and more secure.
+
+
+2. SSE Connection: Once the UUID is returned to the frontend, the client establishes a connection to /subscribe/{UUID}, and the SseEmitter is created and managed in the backend.
+
+
+3. Lifecycle Management: The SseEmitterService handles the lifecycle of the emitters, ensuring proper cleanup in case of timeouts, errors, or completion events.
+
+
+
+
+---
+
+Key Advantages:
+
+Thread Safety: The ConcurrentHashMap ensures that adding and removing subscribers is thread-safe.
+
+Spring Security Integration: The solution leverages Spring Security’s SecurityContext to extract the authenticated user’s token or details, making the backend more secure and maintainable.
+
+Separation of Concerns: The SseEmitterService handles the SSE emitter's lifecycle, while SseService manages subscriber mappings.
+
+
+This solution should now work seamlessly in a Spring Boot application with Spring Security handling authentication, and the frontend can connect via SSE for real-time updates.
+
