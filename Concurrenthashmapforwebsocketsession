@@ -1,0 +1,80 @@
+
+1. Filter the ConcurrentHashMap: Use the whitelistedPermissions list to filter the map by the key (GrpcPermission).
+
+
+2. Collect WebSocketSession objects: From the filtered values (which are lists of Subscriber), extract the WebSocketSession objects and collect them in a list.
+
+
+
+Below is a step-by-step implementation of how you can do this in Java:
+
+Java Code Implementation
+
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+// Assuming Subscriber class is something like this
+class Subscriber {
+    private WebSocketSession session;
+    private String cardNumber; // other fields
+
+    public WebSocketSession getSession() {
+        return session;
+    }
+}
+
+// Your enum GrpcPermission
+enum GrpcPermission {
+    PERMISSION1,
+    PERMISSION2,
+    PERMISSION3
+    // Add more as needed
+}
+
+// Method to extract WebSocketSession based on whitelisted permissions
+public List<WebSocketSession> getSessionsFromWhitelist(
+        ConcurrentHashMap<GrpcPermission, List<Subscriber>> map,
+        Set<GrpcPermission> whitelistedPermissions) {
+
+    // Use streams to filter and collect sessions
+    return map.entrySet().stream()
+            .filter(entry -> whitelistedPermissions.contains(entry.getKey()))  // Filter by whitelisted permissions
+            .flatMap(entry -> entry.getValue().stream())  // Flatten the List<Subscriber> into a stream of Subscribers
+            .map(Subscriber::getSession)  // Extract the WebSocketSession from each Subscriber
+            .collect(Collectors.toList());  // Collect all WebSocketSessions into a List
+}
+
+Explanation:
+
+1. Filter the Map: The .filter(entry -> whitelistedPermissions.contains(entry.getKey())) filters the ConcurrentHashMap based on whether the key (permission) is in the whitelist.
+
+
+2. Flatten the List of Subscribers: The .flatMap(entry -> entry.getValue().stream()) converts each list of Subscriber objects into a stream of Subscriber objects, making it easier to work with.
+
+
+3. Extract the WebSocketSession: The .map(Subscriber::getSession) extracts the WebSocketSession from each Subscriber.
+
+
+4. Collect the WebSocketSession: Finally, .collect(Collectors.toList()) gathers all WebSocketSession objects into a single list.
+
+
+
+Usage Example:
+
+public static void main(String[] args) {
+    ConcurrentHashMap<GrpcPermission, List<Subscriber>> map = new ConcurrentHashMap<>();
+    Set<GrpcPermission> whitelistedPermissions = Set.of(GrpcPermission.PERMISSION1, GrpcPermission.PERMISSION2);
+
+    // Assuming map and subscribers are populated
+
+    List<WebSocketSession> sessions = getSessionsFromWhitelist(map, whitelistedPermissions);
+    
+    // Now you have the list of WebSocketSessions for whitelisted permissions
+    sessions.forEach(System.out::println);
+}
+
+This approach uses Java Streams for clean, concise code that filters, transforms, and collects the necessary data. Make sure you adapt it based on how you have structured your WebSocketSession and Subscriber objects.
