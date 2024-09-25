@@ -1,0 +1,186 @@
+The Subscriber class, based on your requirements and the context of using it as a key in a ConcurrentHashMap, needs to:
+
+1. Encapsulate subscriber information: Include a cardNumber (as the unique identifier) and a list of GrpcPermission.
+
+
+2. Implement hashCode() and equals(): These methods should be based on the fields that define the uniqueness of the Subscriber, which in your case is likely the cardNumber.
+
+
+3. Be as immutable as possible: To avoid issues with changing keys in the map, it's a good practice to make the Subscriber class immutable, or at least ensure that key fields such as cardNumber cannot change after the object is created.
+
+
+
+Here’s how the Subscriber class could be designed:
+
+Immutable Subscriber Class
+
+import java.util.List;
+import java.util.Objects;
+
+public class Subscriber {
+    private final String cardNumber;  // Unique identifier for equality
+    private final List<GrpcPermission> permissions;  // List of permissions (modifiable if needed)
+
+    // Constructor
+    public Subscriber(String cardNumber, List<GrpcPermission> permissions) {
+        if (cardNumber == null || permissions == null) {
+            throw new IllegalArgumentException("CardNumber and Permissions must not be null");
+        }
+        this.cardNumber = cardNumber;
+        this.permissions = List.copyOf(permissions);  // Make permissions list immutable
+    }
+
+    // Getters
+    public String getCardNumber() {
+        return cardNumber;
+    }
+
+    public List<GrpcPermission> getPermissions() {
+        return permissions;  // Return an immutable copy if necessary to avoid external modification
+    }
+
+    // Override equals() to compare based on cardNumber (uniqueness)
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Subscriber that = (Subscriber) o;
+        return Objects.equals(cardNumber, that.cardNumber);  // Equality based on cardNumber
+    }
+
+    // Override hashCode() to compute based on cardNumber
+    @Override
+    public int hashCode() {
+        return Objects.hash(cardNumber);  // Hash based on cardNumber
+    }
+
+    // toString() for debugging and logging purposes
+    @Override
+    public String toString() {
+        return "Subscriber{" +
+                "cardNumber='" + cardNumber + '\'' +
+                ", permissions=" + permissions +
+                '}';
+    }
+}
+
+Key Features of the Class:
+
+1. Fields:
+
+cardNumber: A unique identifier for each subscriber, used to determine equality and uniqueness in the map.
+
+permissions: A list of GrpcPermission that can be used to store the subscriber's permissions.
+
+
+
+2. Immutability:
+
+The cardNumber is final, meaning it cannot be changed once set.
+
+The permissions list is copied using List.copyOf(permissions) to make it immutable, which helps avoid external modification of the list after the Subscriber object is created.
+
+
+
+3. equals() and hashCode():
+
+equals() is based solely on the cardNumber, meaning two Subscriber objects with the same cardNumber are considered equal.
+
+hashCode() is also based on the cardNumber to ensure that the same hash code is returned for equal objects.
+
+These methods ensure that the Subscriber can be used as a key in a ConcurrentHashMap (or any other HashMap), and that lookups will work correctly.
+
+
+
+4. Constructor validation:
+
+The constructor throws an IllegalArgumentException if cardNumber or permissions is null. This ensures that the object is always valid when created.
+
+
+
+5. toString():
+
+The toString() method is overridden to provide a readable string representation of the Subscriber object, useful for logging or debugging.
+
+
+
+
+Usage Example:
+
+import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+
+public class Main {
+    public static void main(String[] args) {
+        // Creating subscribers
+        Subscriber subscriber1 = new Subscriber("1234", List.of(GrpcPermission.PERMISSION1, GrpcPermission.PERMISSION2));
+        Subscriber subscriber2 = new Subscriber("5678", List.of(GrpcPermission.PERMISSION3));
+        
+        // Creating WebSocketSessions (assuming these are objects you have in your system)
+        WebSocketSession session1 = new WebSocketSession();  // Placeholder for an actual session object
+        WebSocketSession session2 = new WebSocketSession();
+
+        // Creating the ConcurrentHashMap
+        ConcurrentHashMap<Subscriber, WebSocketSession> map = new ConcurrentHashMap<>();
+        
+        // Adding entries to the map
+        map.put(subscriber1, session1);
+        map.put(subscriber2, session2);
+
+        // Retrieving a session by subscriber key
+        WebSocketSession sessionRetrieved = map.get(subscriber1);
+        System.out.println("Session for subscriber1: " + sessionRetrieved);
+    }
+}
+
+Modifying Subscriber Class:
+
+If you want the Subscriber class to allow modifications (such as changing permissions), you could make the permissions field mutable. However, you should still avoid modifying the field used for equality (cardNumber).
+
+Here's a version where permissions can be updated:
+
+public class Subscriber {
+    private final String cardNumber;  // Still immutable
+    private List<GrpcPermission> permissions;  // Mutable permissions
+
+    // Constructor
+    public Subscriber(String cardNumber, List<GrpcPermission> permissions) {
+        this.cardNumber = cardNumber;
+        this.permissions = permissions;  // No immutable copy
+    }
+
+    // Getters
+    public String getCardNumber() {
+        return cardNumber;
+    }
+
+    public List<GrpcPermission> getPermissions() {
+        return permissions;
+    }
+
+    // Setters
+    public void setPermissions(List<GrpcPermission> permissions) {
+        this.permissions = permissions;
+    }
+
+    // equals and hashCode remain unchanged based on cardNumber
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Subscriber that = (Subscriber) o;
+        return Objects.equals(cardNumber, that.cardNumber);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(cardNumber);
+    }
+}
+
+Conclusion:
+
+Immutability is preferred for fields like cardNumber that are used for equality checks to avoid bugs and unexpected behavior when using objects as keys in hash-based data structures.
+
+If you need to allow modifications to non-key fields like permissions, ensure that the key fields remain immutable.
+
