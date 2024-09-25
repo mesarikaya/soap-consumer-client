@@ -1,0 +1,112 @@
+If you switch the structure so that the Subscriber is the key and the WebSocketSession is the value in the ConcurrentHashMap, the solution changes because now you will be filtering the map based on the permissions stored in the Subscriber (key) and then collecting the corresponding WebSocketSession (value).
+
+New Map Structure:
+
+ConcurrentHashMap<Subscriber, WebSocketSession>
+
+Here, each Subscriber contains:
+
+A cardNumber
+
+A List<GrpcPermission> representing the permissions for that subscriber
+
+
+Problem:
+
+You want to extract the WebSocketSession objects from the map where the Subscriber (the key) has at least one permission that is in a list of whitelisted permissions.
+
+Approach:
+
+1. Filter the map: You'll need to check each Subscriber's permissions to see if any of them are in the whitelisted permissions list.
+
+
+2. Collect the matching sessions: For each matching Subscriber, collect the corresponding WebSocketSession (the value in the map).
+
+
+
+Java Code Implementation:
+
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+// Assuming Subscriber class is something like this
+class Subscriber {
+    private String cardNumber;
+    private List<GrpcPermission> permissions;
+
+    public List<GrpcPermission> getPermissions() {
+        return permissions;
+    }
+}
+
+// Your enum GrpcPermission
+enum GrpcPermission {
+    PERMISSION1,
+    PERMISSION2,
+    PERMISSION3
+    // Add more as needed
+}
+
+// Method to extract WebSocketSession based on whitelisted permissions
+public List<WebSocketSession> getSessionsFromWhitelist(
+        ConcurrentHashMap<Subscriber, WebSocketSession> map,
+        Set<GrpcPermission> whitelistedPermissions) {
+
+    // Use streams to filter and collect sessions
+    return map.entrySet().stream()
+            .filter(entry -> entry.getKey().getPermissions().stream()
+                    .anyMatch(whitelistedPermissions::contains))  // Check if any permission is in the whitelist
+            .map(Map.Entry::getValue)  // Get the WebSocketSession (value)
+            .collect(Collectors.toList());  // Collect the sessions into a List
+}
+
+Explanation:
+
+1. Filtering based on permissions:
+
+.filter(entry -> entry.getKey().getPermissions().stream().anyMatch(whitelistedPermissions::contains)): This checks if any of the permissions in the Subscriber's permission list (the key of the map) are in the whitelistedPermissions.
+
+
+
+2. Mapping to the WebSocketSession (Value):
+
+After filtering, .map(Map.Entry::getValue) is used to extract the WebSocketSession value from the map.
+
+
+
+3. Collecting the sessions:
+
+Finally, .collect(Collectors.toList()) gathers all the matching WebSocketSession objects into a list.
+
+
+
+
+Usage Example:
+
+public static void main(String[] args) {
+    ConcurrentHashMap<Subscriber, WebSocketSession> map = new ConcurrentHashMap<>();
+    Set<GrpcPermission> whitelistedPermissions = Set.of(GrpcPermission.PERMISSION1, GrpcPermission.PERMISSION2);
+
+    // Assuming map and subscribers are populated
+
+    List<WebSocketSession> sessions = getSessionsFromWhitelist(map, whitelistedPermissions);
+    
+    // Now you have the list of WebSocketSessions for subscribers with whitelisted permissions
+    sessions.forEach(System.out::println);
+}
+
+Key Points:
+
+The map now uses Subscriber as the key and WebSocketSession as the value, so after filtering based on the Subscriber's permissions, you collect the corresponding WebSocketSession.
+
+The Stream API is still used for concise and efficient processing.
+
+The filtering logic (anyMatch) remains the same since you're checking if the Subscriber has at least one permission that matches the whitelist.
+
+
+Considerations:
+
+Since Subscriber is now a key, you should ensure that the Subscriber class implements equals() and hashCode() properly, as these are required for it to function correctly as a key in the ConcurrentHashMap.
+
