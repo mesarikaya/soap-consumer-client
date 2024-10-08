@@ -1,0 +1,186 @@
+In Spring Boot 3.x (with Spring Security 6), many components related to security have been revamped, including how filters, authentication providers, and security configurations are set up. The KeycloakAuthenticationConfiguration you mentioned (or similar classes) were part of older setups, particularly with Keycloak integrations, which might now be incompatible due to these changes.
+
+Keycloak's integration with Spring Security was updated to align with the newer, more declarative configuration model of Spring Security 6, which requires some changes to how custom AuthenticationProvider and Filter classes are implemented.
+
+Changes in Spring Security 6 and Keycloak Integration
+
+1. No More KeycloakAuthenticationConfiguration Extension: The method of extending KeycloakAuthenticationConfiguration or WebSecurityConfigurerAdapter to customize security configurations is deprecated.
+
+
+2. Explicit Configuration of Filter Chains: You now configure the filter chain more explicitly via the SecurityFilterChain bean.
+
+
+3. Custom AuthenticationProvider and Role Mapping: You will need to refactor the way you are implementing your custom AuthenticationProvider and role mapping.
+
+
+
+Migration Steps to Adapt to Spring Boot 3.x
+
+Here’s how you can adapt your custom Filter and AuthenticationProvider for Keycloak integration in Spring Boot 3.x:
+
+1. Keycloak Spring Boot Adapter Changes
+
+In Spring Boot 3.x, the Keycloak Spring Security adapter is no longer officially supported. Instead, the recommended approach is to use Keycloak Spring Security with OpenID Connect (OIDC) and configure Keycloak as a resource server using the Spring Security OAuth2 Resource Server.
+
+You no longer extend KeycloakAuthenticationConfiguration. Instead, configure Keycloak as a resource server using JWT tokens.
+
+2. Refactor Your Custom AuthenticationProvider
+
+If you previously implemented a custom AuthenticationProvider that mapped users to roles based on Keycloak’s authentication, you need to switch to a more explicit role mapping in your custom provider.
+
+Here’s how to adapt a custom AuthenticationProvider and a filter for Keycloak in Spring Boot 3.x:
+
+Example Configuration for Keycloak with Spring Boot 3.x
+
+Custom AuthenticationProvider with Role Mapping
+
+You can use AuthenticationProvider to map users from Keycloak to your application roles:
+
+import org.springframework.security.authentication.AuthenticationProvider;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.stereotype.Component;
+
+import java.util.Collection;
+import java.util.stream.Collectors;
+
+@Component
+public class KeycloakAuthenticationProvider implements AuthenticationProvider {
+
+    @Override
+    public Authentication authenticate(Authentication authentication) throws AuthenticationException {
+        JwtAuthenticationToken jwtAuthenticationToken = (JwtAuthenticationToken) authentication;
+        Jwt jwt = jwtAuthenticationToken.getToken();
+        
+        // Extract roles from JWT token or Keycloak specific claim
+        Collection<? extends GrantedAuthority> authorities = jwtAuthenticationToken.getAuthorities();
+
+        // Map roles or modify authorities based on your requirements
+        Collection<GrantedAuthority> mappedAuthorities = authorities.stream()
+                .map(authority -> {
+                    // Map roles based on authority or custom logic
+                    // Example: map 'ROLE_USER' from Keycloak roles
+                    return authority;
+                }).collect(Collectors.toList());
+
+        return new UsernamePasswordAuthenticationToken(jwtAuthenticationToken.getPrincipal(), null, mappedAuthorities);
+    }
+
+    @Override
+    public boolean supports(Class<?> authentication) {
+        return JwtAuthenticationToken.class.isAssignableFrom(authentication);
+    }
+}
+
+Security Configuration with Keycloak Integration
+
+Here’s the updated security configuration that works with Keycloak as an OAuth2 resource server:
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+public class SecurityConfig {
+
+    private final KeycloakAuthenticationProvider keycloakAuthenticationProvider;
+
+    public SecurityConfig(KeycloakAuthenticationProvider keycloakAuthenticationProvider) {
+        this.keycloakAuthenticationProvider = keycloakAuthenticationProvider;
+    }
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        return http
+                .csrf().disable() // Disable CSRF for APIs
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/public/**").permitAll()
+                        .anyRequest().authenticated() // All other requests require authentication
+                )
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())) // Use JWT for auth
+                )
+                .authenticationProvider(keycloakAuthenticationProvider) // Use the custom Keycloak provider
+                .build();
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
+        return configuration.getAuthenticationManager();
+    }
+
+    // This converter extracts roles from the JWT token (Keycloak roles)
+    private JwtAuthenticationConverter jwtAuthenticationConverter() {
+        JwtGrantedAuthoritiesConverter grantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
+        grantedAuthoritiesConverter.setAuthorityPrefix("ROLE_"); // Prefix Keycloak roles with 'ROLE_'
+        grantedAuthoritiesConverter.setAuthoritiesClaimName("realm_access"); // Keycloak uses 'realm_access' for roles
+
+        JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
+        jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(grantedAuthoritiesConverter);
+        return jwtAuthenticationConverter;
+    }
+}
+
+Explanation of Key Components:
+
+1. KeycloakAuthenticationProvider: This custom provider handles role extraction from the Keycloak JWT token and maps those roles to authorities in your Spring Security context.
+
+
+2. SecurityFilterChain: The security configuration uses Spring Security’s OAuth2 Resource Server feature to authenticate requests via JWT tokens (issued by Keycloak).
+
+
+3. JwtAuthenticationConverter: This converter maps Keycloak roles to Spring Security GrantedAuthority. You can customize how Keycloak’s JWT token roles are interpreted and applied as roles within your application.
+
+
+
+3. Custom Filter Implementation (Optional)
+
+If you had a custom Filter to process Keycloak tokens, you might not need it anymore since the oauth2ResourceServer configuration handles token parsing and authentication. However, if you still need a custom filter, you can add it similarly:
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+
+@Component
+public class CustomKeycloakFilter extends OncePerRequestFilter {
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain) throws ServletException, IOException {
+        // Optionally process the JWT token manually
+        JwtAuthenticationToken authentication = (JwtAuthenticationToken) SecurityContextHolder.getContext().getAuthentication();
+        Jwt jwt = authentication.getToken();
+
+        // Perform custom logic with the token if necessary
+        filterChain.doFilter(request, response);
+    }
+}
+
+Key Points for Migrating to Spring Boot 3.x:
+
+Stop Extending KeycloakAuthenticationConfiguration: Use SecurityFilterChain to configure security instead.
+
+Use Spring’s OAuth2 Resource Server: This is now the standard way to authenticate and handle JWT tokens with Keycloak.
+
+Explicit Role Mapping: Use a custom JwtAuthenticationConverter to map Keycloak roles to Spring Security authorities.
+
+
+With these changes, your application will be fully migrated to Spring Boot 3.x while maintaining compatibility with Keycloak for authentication and role-based authorization.
