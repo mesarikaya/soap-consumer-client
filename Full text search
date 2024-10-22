@@ -1,0 +1,177 @@
+The @@ operator in PostgreSQL is used for full-text search. It matches a text search query against a document. In the context of a jsonb field, you can use this operator to perform a full-text search within the JSON content.
+
+Full-text search in PostgreSQL allows you to search for words or phrases within text fields or JSON fields. The process involves creating a text search vector from the content and then using a text search query to find matches. The @@ operator is what connects the vector to the search query.
+
+1. Full-Text Search Basics
+
+to_tsvector(): Converts text (or JSON) into a text search vector, which is essentially a list of searchable terms.
+
+to_tsquery(): Converts a search string into a text search query.
+
+@@: Matches a tsquery (search query) against a tsvector (searchable content).
+
+
+2. Example Setup for JSONB Full-Text Search
+
+Let’s say we have a table with a jsonb column content, and we want to perform a full-text search on it.
+
+CREATE TABLE my_entity (
+    id SERIAL PRIMARY KEY,
+    content JSONB,
+    status VARCHAR(20)
+);
+
+Sample data in the content column could look like this:
+
+{
+    "title": "PostgreSQL Full-Text Search",
+    "body": "This tutorial explains how to use full-text search in PostgreSQL with JSONB fields."
+}
+
+3. Creating a GIN Index for Performance
+
+For full-text search on large tables, it’s recommended to create a GIN (Generalized Inverted Index) to optimize search performance.
+
+CREATE INDEX idx_gin_content ON my_entity USING gin (to_tsvector('english', content::text));
+
+This index converts the jsonb content into a text format (content::text) and creates a search vector (to_tsvector) in English. You can change 'english' to any other language as required.
+
+4. Example Full-Text Search Query
+
+Now let’s say we want to search for entities that contain the word PostgreSQL in their JSON content.
+
+SELECT * FROM my_entity
+WHERE to_tsvector('english', content::text) @@ to_tsquery('PostgreSQL');
+
+Explanation:
+
+to_tsvector('english', content::text): This converts the jsonb content into a text search vector in English, so it’s searchable.
+
+@@: This checks if the text search vector matches the search query.
+
+to_tsquery('PostgreSQL'): This converts the word PostgreSQL into a full-text search query.
+
+
+This query will return any rows where the word PostgreSQL is found in the content field.
+
+5. Searching Multiple Words
+
+You can search for multiple words using the & operator in the query string. For example, to search for both "PostgreSQL" and "Search":
+
+SELECT * FROM my_entity
+WHERE to_tsvector('english', content::text) @@ to_tsquery('PostgreSQL & Search');
+
+This query returns rows where both words are found in the content field.
+
+6. Using Full-Text Search with Spring Data JPA
+
+In Spring Data JPA, you can use a native query to run this kind of full-text search. Here's how to define this in your repository:
+
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+
+public interface MyEntityRepository extends JpaRepository<MyEntity, Long> {
+
+    // Full-text search using native query
+    @Query(value = "SELECT * FROM my_entity WHERE to_tsvector('english', content::text) @@ to_tsquery(:query)", nativeQuery = true)
+    List<MyEntity> fullTextSearch(@Param("query") String query);
+}
+
+7. Example Usage in Service and Controller
+
+In your service layer, you can call this repository method like so:
+
+@Service
+public class MyEntityService {
+
+    private final MyEntityRepository repository;
+
+    public MyEntityService(MyEntityRepository repository) {
+        this.repository = repository;
+    }
+
+    public List<MyEntityDTO> fullTextSearch(String query) {
+        return repository.fullTextSearch(query).stream()
+                .map(MyEntityMapper::toDto)
+                .toList();
+    }
+}
+
+And in the controller:
+
+@RestController
+@RequestMapping("/my-entities")
+public class MyEntityController {
+
+    private final MyEntityService service;
+
+    public MyEntityController(MyEntityService service) {
+        this.service = service;
+    }
+
+    @GetMapping("/search")
+    public List<MyEntityDTO> search(@RequestParam String query) {
+        return service.fullTextSearch(query);
+    }
+}
+
+Now, you can search the JSONB content by making a request to /my-entities/search with the query parameter, like so:
+
+GET /my-entities/search?query=PostgreSQL
+
+This will return a list of entities whose JSON content contains the word PostgreSQL.
+
+8. Phrase Searching
+
+You can also search for phrases by combining words with & or |. For example, to search for either "PostgreSQL" or "Search", you can use:
+
+SELECT * FROM my_entity
+WHERE to_tsvector('english', content::text) @@ to_tsquery('PostgreSQL | Search');
+
+9. Searching with Negation
+
+To search for documents that contain "PostgreSQL" but do not contain "Search", you can use the negation operator (!):
+
+SELECT * FROM my_entity
+WHERE to_tsvector('english', content::text) @@ to_tsquery('PostgreSQL & !Search');
+
+This query will return documents that contain the word "PostgreSQL" but do not contain the word "Search."
+
+10. Using Weights and Rankings (Optional)
+
+PostgreSQL also supports ranking results based on the relevance of the matches. You can assign weights to certain fields in your JSON and rank the results accordingly. Here's an example of using ts_rank for ranking results:
+
+SELECT *, ts_rank(to_tsvector('english', content::text), to_tsquery('PostgreSQL')) as rank
+FROM my_entity
+WHERE to_tsvector('english', content::text) @@ to_tsquery('PostgreSQL')
+ORDER BY rank DESC;
+
+This query will return the results ordered by their relevance (rank) based on how closely they match the search term.
+
+
+---
+
+Summary
+
+@@ Operator: Matches a text search query against a text search vector (created from the content).
+
+to_tsvector(): Converts text (or JSON) into a searchable text search vector.
+
+to_tsquery(): Converts a string or query expression into a search query.
+
+Example Queries:
+
+Search for a single word: to_tsquery('PostgreSQL')
+
+Search for multiple words: to_tsquery('PostgreSQL & Search')
+
+Negation: to_tsquery('PostgreSQL & !Search')
+
+Search phrases or alternatives: to_tsquery('PostgreSQL | Search')
+
+
+
+Using this method, you can perform full-text search on JSONB columns and return relevant search results in a Spring Boot application.
