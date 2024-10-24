@@ -1,0 +1,250 @@
+Here is an example of a Spring Boot application that uses Elasticsearch for storing a Topic document with nested Content, following the use case we discussed:
+
+Step-by-Step Guide
+
+1. Setup Dependencies (Maven)
+
+In your pom.xml, add dependencies for Spring Boot, Elasticsearch, and Spring Data Elasticsearch:
+
+<dependencies>
+    <!-- Spring Boot -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-data-elasticsearch</artifactId>
+    </dependency>
+    
+    <!-- Optional: DevTools for Hot Reload -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-devtools</artifactId>
+        <scope>runtime</scope>
+    </dependency>
+
+    <!-- Lombok for boilerplate code reduction -->
+    <dependency>
+        <groupId>org.projectlombok</groupId>
+        <artifactId>lombok</artifactId>
+        <optional>true</optional>
+    </dependency>
+
+    <!-- Spring Web for REST APIs -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+</dependencies>
+
+2. Create Entity Classes (Topic and Content)
+
+We will use @Document annotations to define the Topic class as a document in Elasticsearch, and include Content as a nested object.
+
+import org.springframework.data.annotation.Id;
+import org.springframework.data.elasticsearch.annotations.Document;
+import org.springframework.data.elasticsearch.annotations.Field;
+import org.springframework.data.elasticsearch.annotations.FieldType;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+@Document(indexName = "topics")
+public class Topic {
+
+    @Id
+    private String id;
+
+    private String status;
+
+    @Field(type = FieldType.Nested, includeInParent = true)
+    private Content content;
+}
+
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+class Content {
+
+    private String id;
+    private String text;
+}
+
+Here, the @Document annotation tells Elasticsearch that this is a document to be indexed. The @Field annotation with FieldType.Nested ensures the Content object is indexed as a nested document.
+
+3. Create Repository Interface
+
+We will create a repository for the Topic document, using Spring Data Elasticsearch to manage the CRUD operations.
+
+import org.springframework.data.elasticsearch.repository.ElasticsearchRepository;
+
+public interface TopicRepository extends ElasticsearchRepository<Topic, String> {
+}
+
+4. Service Layer
+
+The service will handle the logic of saving a Topic document and its nested Content.
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.util.UUID;
+
+@Service
+public class TopicService {
+
+    @Autowired
+    private TopicRepository topicRepository;
+
+    public Topic saveTopic(Topic topic) {
+        // Generate unique IDs for both Topic and Content
+        topic.setId(UUID.randomUUID().toString());
+        topic.getContent().setId(UUID.randomUUID().toString());
+
+        return topicRepository.save(topic);
+    }
+
+    public Iterable<Topic> getAllTopics() {
+        return topicRepository.findAll();
+    }
+}
+
+The saveTopic method assigns a UUID to both the Topic and Content objects before saving them to Elasticsearch.
+
+5. Create REST Controller
+
+The controller will expose the API endpoints for saving and retrieving Topic documents.
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/topics")
+public class TopicController {
+
+    @Autowired
+    private TopicService topicService;
+
+    @PostMapping
+    public Topic createTopic(@RequestBody Topic topic) {
+        return topicService.saveTopic(topic);
+    }
+
+    @GetMapping
+    public Iterable<Topic> getAllTopics() {
+        return topicService.getAllTopics();
+    }
+}
+
+POST /api/topics will allow you to save a new Topic document with nested Content.
+
+GET /api/topics will return all the topics from Elasticsearch.
+
+
+6. Elasticsearch Configuration
+
+Ensure that your application.properties file has the necessary configurations for connecting to your Elasticsearch instance.
+
+spring.elasticsearch.rest.uris=http://localhost:9200
+spring.elasticsearch.index.auto-create=true
+
+7. Testing the API
+
+You can test the API using a tool like Postman. For example:
+
+POST request to /api/topics:
+
+
+{
+  "status": "open",
+  "content": {
+    "text": "This is the content for the topic"
+  }
+}
+
+Response:
+
+
+{
+  "id": "generated-topic-id",
+  "status": "open",
+  "content": {
+    "id": "generated-content-id",
+    "text": "This is the content for the topic"
+  }
+}
+
+Benefits of Using Elasticsearch for This Scenario
+
+Full-Text Search: You can leverage Elasticsearch’s powerful search features to perform full-text queries on the Content's text field.
+
+Nested Documents: Elasticsearch’s nested type allows you to store related data (like Content) inside a parent document (Topic), similar to how MongoDB handles embedded documents.
+
+ACID (Atomicity, Consistency, Isolation, Durability) describes the properties of a database transaction, ensuring reliability in traditional database management systems. Let's compare how PostgreSQL, MongoDB, and Elasticsearch handle ACID properties:
+
+1. PostgreSQL (Relational Database - ACID Compliant)
+
+PostgreSQL is a fully ACID-compliant relational database, which means it adheres strictly to all ACID properties across transactions:
+
+Atomicity: PostgreSQL ensures that all operations within a transaction either complete fully or not at all. If any part of a transaction fails, all changes made during that transaction are rolled back.
+
+Consistency: PostgreSQL ensures that any transaction will bring the database from one valid state to another. For example, it enforces constraints like foreign keys, uniqueness, and not-null, ensuring data integrity.
+
+Isolation: PostgreSQL provides different isolation levels (Read Uncommitted, Read Committed, Repeatable Read, Serializable) to control how transactions are visible to each other. The highest level, Serializable, prevents other transactions from seeing any intermediate states.
+
+Durability: Once a transaction is committed in PostgreSQL, the data is guaranteed to be saved, even in the event of a crash, as it writes transaction data to the WAL (Write-Ahead Logging) for crash recovery.
+
+
+Use case: Best suited for applications where strong consistency, transactional integrity, and relational operations are crucial (e.g., banking systems, enterprise applications).
+
+2. MongoDB (NoSQL Document Store - Partial ACID Compliance)
+
+MongoDB historically was not fully ACID-compliant, but from version 4.0 onward, it introduced multi-document ACID transactions. However, its original design focuses more on scalability and availability than strict ACID properties.
+
+Atomicity: Before MongoDB 4.0, atomicity was guaranteed only at the document level. This meant that updates to a single document would be atomic, but multi-document operations were not. Since MongoDB 4.0, multi-document transactions offer full atomicity.
+
+Consistency: MongoDB ensures consistency within a single document operation. It supports schema validation at the document level, ensuring data conforms to rules. With multi-document transactions, MongoDB can ensure consistency across collections.
+
+Isolation: MongoDB supports snapshot isolation at the transaction level. In multi-document transactions, operations are isolated from other concurrent operations until they commit. However, its isolation guarantees are typically weaker than traditional relational databases.
+
+Durability: MongoDB ensures durability via its Write Concern configuration. By default, data is written to the WiredTiger storage engine’s journal before it's considered durable. However, write durability depends on replication and acknowledgment settings (like w:majority).
+
+
+Use case: MongoDB is well-suited for high-performance applications where flexibility in schema and scalability are more important than strict ACID compliance (e.g., content management systems, real-time data platforms).
+
+3. Elasticsearch (Search Engine - Not Fully ACID Compliant)
+
+Elasticsearch is designed primarily for search and analysis, focusing on eventual consistency rather than strong ACID guarantees. It is not an ACID-compliant database, but it offers some limited support for certain properties:
+
+Atomicity: Elasticsearch does not support multi-document transactions, meaning operations are atomic only at the document level. When you index or update a single document, it's atomic (all or nothing), but there are no atomic guarantees for multiple documents.
+
+Consistency: Elasticsearch offers eventual consistency, meaning changes (e.g., document indexing) propagate across the cluster eventually. After an update, searches on the same document might not reflect the most recent changes immediately. Consistency is achieved over time but isn't guaranteed instantly.
+
+Isolation: Elasticsearch does not provide transaction isolation like relational databases. Operations happen asynchronously, and during this period, intermediate states may be visible to some queries. Elasticsearch does not provide guarantees like isolation levels (e.g., Repeatable Read or Serializable) available in relational databases.
+
+Durability: Elasticsearch ensures durability by persisting data in memory and periodically flushing it to disk (via Lucene’s commit mechanism). However, data could be lost if Elasticsearch crashes before the flush happens. To mitigate this, Elasticsearch offers replication across nodes for fault tolerance.
+
+
+Use case: Best suited for scenarios requiring fast search and analytics over large datasets, where eventual consistency is acceptable, and strict transactional guarantees are not required (e.g., logging, real-time analytics, full-text search engines).
+
+Summary Table:
+
+Conclusion:
+
+PostgreSQL is a traditional ACID-compliant database, ideal for applications needing strong transactional integrity.
+
+MongoDB provides flexible schema and eventually offers multi-document ACID compliance, making it suitable for web-scale and NoSQL scenarios where ACID is occasionally needed.
+
+Elasticsearch prioritizes search and analytics over ACID compliance, making it suitable for read-heavy, search-focused applications where eventual consistency is acceptable.
+
+
+Each database serves different use cases, and selecting the right one depends on your application’s need for strict transactional guarantees vs. flexibility, scalability, and performance.
+
+Considerations
+
+Elasticsearch is optimized for search, so if your use case involves complex search operations, it would perform well.
+
+If you need advanced transactional guarantees, you might need to manage those at the application level, as Elasticsearch is not designed for strict ACID transactions.
+
+
