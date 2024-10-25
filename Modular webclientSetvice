@@ -1,0 +1,126 @@
+AbstractApiService is defined as AbstractApiService<T>, we actually don’t need to pass Class<T> as a parameter to fetch. Java already knows the type T when the subclass is defined, so we can directly use T in fetch without requiring the Class<T> parameter every time we call it.
+
+Here's how to adjust AbstractApiService<T> to eliminate the need for Class<T> as a parameter in fetch.
+
+Step 1: Adjust AbstractApiService<T> to Use ParameterizedTypeReference
+
+In Java, due to type erasure, you can’t directly use T at runtime. However, with ParameterizedTypeReference, you can capture the generic type of T and use it in the fetch method. This allows fetch to use T without needing Class<T> as a parameter.
+
+Here’s the updated code:
+
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.util.UriBuilder;
+import reactor.core.publisher.Mono;
+
+import java.net.URI;
+import java.util.function.Function;
+
+public abstract class AbstractApiService<T> {
+
+    private final WebClient webClient;
+
+    public AbstractApiService(WebClient.Builder webClientBuilder) {
+        this.webClient = webClientBuilder.build();
+    }
+
+    protected URI getUri(Function<UriBuilder, URI> uriBuilderFunction) {
+        return uriBuilderFunction.apply(webClient.uriBuilder());
+    }
+
+    // fetch method that uses ParameterizedTypeReference<T> for dynamic type
+    public Mono<T> fetch(Function<UriBuilder, URI> uriBuilderFunction) {
+        return webClient.get()
+                .uri(getUri(uriBuilderFunction))
+                .retrieve()
+                .bodyToMono(getParameterizedTypeReference())
+                .onErrorResume(ex -> Mono.error(new RuntimeException("Error fetching data: " + ex.getMessage())));
+    }
+
+    // Abstract method to provide a ParameterizedTypeReference for T
+    protected abstract ParameterizedTypeReference<T> getParameterizedTypeReference();
+}
+
+Explanation of ParameterizedTypeReference
+
+ParameterizedTypeReference: This class in Spring allows you to capture and pass generic type information at runtime. Each subclass will provide the specific ParameterizedTypeReference for T, so fetch can correctly deserialize the response into T without needing Class<T> as a parameter.
+
+
+Step 2: Implementing Subclasses Using ParameterizedTypeReference
+
+Each subclass (like TeaService and NameService) will implement getParameterizedTypeReference() to return the correct ParameterizedTypeReference for their respective types.
+
+TeaService Implementation
+
+For TeaService, T is Tea, so we return new ParameterizedTypeReference<Tea>() {}.
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
+
+@Service
+public class TeaService extends AbstractApiService<Tea> {
+
+    private final String baseUrl;
+
+    public TeaService(WebClient.Builder webClientBuilder, @Value("${api.tea-service.url}") String baseUrl) {
+        super(webClientBuilder);
+        this.baseUrl = baseUrl;
+    }
+
+    @Override
+    protected ParameterizedTypeReference<Tea> getParameterizedTypeReference() {
+        return new ParameterizedTypeReference<>() {};
+    }
+
+    public Mono<Tea> fetchTeaById(String id) {
+        return fetch(uriBuilder -> uriBuilder
+                .uri(URI.create(baseUrl))
+                .path("/teams/{id}")
+                .build(id));
+    }
+}
+
+NameService Implementation
+
+For NameService, T is Name[], so we return new ParameterizedTypeReference<Name[]>() {}.
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
+
+@Service
+public class NameService extends AbstractApiService<Name[]> {
+
+    private final String baseUrl;
+
+    public NameService(WebClient.Builder webClientBuilder, @Value("${api.name-service.url}") String baseUrl) {
+        super(webClientBuilder);
+        this.baseUrl = baseUrl;
+    }
+
+    @Override
+    protected ParameterizedTypeReference<Name[]> getParameterizedTypeReference() {
+        return new ParameterizedTypeReference<>() {};
+    }
+
+    public Mono<Name[]> fetchNames() {
+        return fetch(uriBuilder -> uriBuilder
+                .uri(URI.create(baseUrl))
+                .path("/names")
+                .build());
+    }
+}
+
+Benefits of This Approach
+
+No Need for Class<T> Parameter: fetch no longer requires Class<T> because each subclass provides the ParameterizedTypeReference for T.
+
+Cleaner Code: Subclasses only need to implement getParameterizedTypeReference to specify their type.
+
+Flexibility: This approach is flexible for both single objects and arrays, and you avoid duplicating Class<T> or Class<T[]> logic across methods.
+
+
+This setup provides a more streamlined and type-safe way to handle T in AbstractApiService, leveraging ParameterizedTypeReference to resolve the generic type at runtime.
