@@ -1,0 +1,133 @@
+ AbstractApiService to work with different types (T), such as a single Tea object for one service and an array of Name objects (Name[]) for another service, you can make AbstractApiService generic. This way, AbstractApiService<T> can handle both single objects and arrays through the generic T type parameter.
+
+Here’s how you can set it up:
+
+Step 1: Define AbstractApiService<T> as a Generic Class
+
+By defining AbstractApiService as AbstractApiService<T>, you can specify the type T when you create subclasses, making fetch flexible enough to handle both single objects and arrays.
+
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.util.UriBuilder;
+import reactor.core.publisher.Mono;
+
+import java.net.URI;
+import java.util.function.Function;
+
+public abstract class AbstractApiService<T> {
+
+    private final WebClient webClient;
+
+    public AbstractApiService(WebClient.Builder webClientBuilder) {
+        this.webClient = webClientBuilder.build();
+    }
+
+    // Single getUri method that uses a UriBuilder function to build the full URI
+    protected URI getUri(Function<UriBuilder, URI> uriBuilderFunction) {
+        return uriBuilderFunction.apply(webClient.uriBuilder());
+    }
+
+    // Generic fetch method that can handle any type of response specified by T
+    public Mono<T> fetch(Function<UriBuilder, URI> uriBuilderFunction) {
+        return webClient.get()
+                .uri(getUri(uriBuilderFunction))
+                .retrieve()
+                .bodyToMono(getResponseType()) // Calls the abstract method to get the class type of T
+                .onErrorResume(ex -> Mono.error(new RuntimeException("Error fetching data: " + ex.getMessage())));
+    }
+
+    // Abstract method to be implemented by subclasses to provide the specific Class<T> type
+    protected abstract Class<T> getResponseType();
+}
+
+Explanation
+
+Generic Class Definition: AbstractApiService<T> makes the whole service flexible for any type T.
+
+Generic fetch Method: Uses T as the response type, so you can fetch both single objects (Tea) and arrays (Name[]).
+
+Abstract getResponseType Method: Each subclass will implement this method to return the Class<T> for the type they’re handling.
+
+
+Step 2: Implement TeaService and NameService Using AbstractApiService
+
+In TeaService, set T to Tea, and in NameService, set T to Name[].
+
+TeaService Example
+
+For TeaService, T is Tea, so getResponseType will return Tea.class.
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
+
+@Service
+public class TeaService extends AbstractApiService<Tea> {
+
+    private final String baseUrl;
+
+    public TeaService(WebClient.Builder webClientBuilder, @Value("${api.tea-service.url}") String baseUrl) {
+        super(webClientBuilder);
+        this.baseUrl = baseUrl; // e.g., "https://test.com/API/V1"
+    }
+
+    @Override
+    protected Class<Tea> getResponseType() {
+        return Tea.class;
+    }
+
+    public Mono<Tea> fetchTeaById(String id) {
+        return fetch(uriBuilder -> uriBuilder
+                .uri(URI.create(baseUrl))
+                .path("/teams/{id}")
+                .build(id));
+    }
+}
+
+NameService Example
+
+For NameService, T is Name[], so getResponseType will return Name[].class.
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
+
+@Service
+public class NameService extends AbstractApiService<Name[]> {
+
+    private final String baseUrl;
+
+    public NameService(WebClient.Builder webClientBuilder, @Value("${api.name-service.url}") String baseUrl) {
+        super(webClientBuilder);
+        this.baseUrl = baseUrl; // e.g., "https://test.com/API/V1"
+    }
+
+    @Override
+    protected Class<Name[]> getResponseType() {
+        return Name[].class;
+    }
+
+    public Mono<Name[]> fetchNames() {
+        return fetch(uriBuilder -> uriBuilder
+                .uri(URI.create(baseUrl))
+                .path("/names")
+                .build());
+    }
+}
+
+Explanation of the Subclasses
+
+Type Specificity: Each subclass specifies the type T—Tea for TeaService and Name[] for NameService.
+
+Type-Specific getResponseType: Each subclass implements getResponseType to provide the appropriate class (Tea.class for TeaService and Name[].class for NameService).
+
+
+How It Works in Practice
+
+1. TeaService will make requests expecting a Tea object response.
+
+
+2. NameService will make requests expecting a Name[] array response.
+
+
+
+This approach keeps AbstractApiService flexible and reusable, as each subclass can now specify its own response type by simply defining the type T and implementing getResponseType.
