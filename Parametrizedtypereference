@@ -1,0 +1,116 @@
+ ParameterizedTypeReference in the abstract class AbstractApiService<T> to capture the generic type information in one place and reuse it across subclasses. This avoids requiring each subclass to implement getParameterizedTypeReference().
+
+Here’s how you can implement it:
+
+Solution: Capture T Once in AbstractApiService<T>
+
+You can use a field in AbstractApiService<T> to store the ParameterizedTypeReference<T> and initialize it in the constructor or during class initialization. This approach captures the type once and makes it available for fetch without needing each subclass to implement its own getParameterizedTypeReference().
+
+Example Code
+
+Here’s how it can be set up:
+
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.util.UriBuilder;
+import reactor.core.publisher.Mono;
+
+import java.net.URI;
+import java.util.function.Function;
+
+public abstract class AbstractApiService<T> {
+
+    private final WebClient webClient;
+    private final ParameterizedTypeReference<T> responseTypeReference;
+
+    public AbstractApiService(WebClient.Builder webClientBuilder) {
+        this.webClient = webClientBuilder.build();
+        this.responseTypeReference = new ParameterizedTypeReference<>() {}; // Capture T once here
+    }
+
+    protected URI getUri(Function<UriBuilder, URI> uriBuilderFunction) {
+        return uriBuilderFunction.apply(webClient.uriBuilder());
+    }
+
+    // fetch method that now uses responseTypeReference directly
+    public Mono<T> fetch(Function<UriBuilder, URI> uriBuilderFunction) {
+        return webClient.get()
+                .uri(getUri(uriBuilderFunction))
+                .retrieve()
+                .bodyToMono(responseTypeReference)
+                .onErrorResume(ex -> Mono.error(new RuntimeException("Error fetching data: " + ex.getMessage())));
+    }
+}
+
+Explanation
+
+Single Initialization of ParameterizedTypeReference<T>: responseTypeReference is initialized once in the constructor (or alternatively, during class instantiation), capturing the type information for T.
+
+Reuse Across Subclasses: Each subclass automatically inherits this responseTypeReference field, so there’s no need to redefine it or override any methods. fetch now directly uses responseTypeReference.
+
+
+Using Subclasses Without Additional Code
+
+Now, subclasses like TeaService or NameService don’t need to implement getParameterizedTypeReference() or provide any specific type references. They simply inherit the behavior:
+
+TeaService Example
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
+
+@Service
+public class TeaService extends AbstractApiService<Tea> {
+
+    private final String baseUrl;
+
+    public TeaService(WebClient.Builder webClientBuilder, @Value("${api.tea-service.url}") String baseUrl) {
+        super(webClientBuilder);
+        this.baseUrl = baseUrl;
+    }
+
+    public Mono<Tea> fetchTeaById(String id) {
+        return fetch(uriBuilder -> uriBuilder
+                .uri(URI.create(baseUrl))
+                .path("/teams/{id}")
+                .build(id));
+    }
+}
+
+NameService Example
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
+
+@Service
+public class NameService extends AbstractApiService<Name[]> {
+
+    private final String baseUrl;
+
+    public NameService(WebClient.Builder webClientBuilder, @Value("${api.name-service.url}") String baseUrl) {
+        super(webClientBuilder);
+        this.baseUrl = baseUrl;
+    }
+
+    public Mono<Name[]> fetchNames() {
+        return fetch(uriBuilder -> uriBuilder
+                .uri(URI.create(baseUrl))
+                .path("/names")
+                .build());
+    }
+}
+
+Advantages of This Approach
+
+1. Cleaner Code: AbstractApiService captures the generic type information for T just once, so subclasses don’t need to handle it.
+
+
+2. Reduced Boilerplate: No need to repeat ParameterizedTypeReference logic in each subclass.
+
+
+3. Flexibility: It still supports both single objects (Tea) and arrays (Name[]) since the ParameterizedTypeReference captures whatever type T represents in each specific subclass.
+
+
+
+This way, AbstractApiService handles type capturing and deserialization transparently, keeping the subclasses focused solely on their business logic.
