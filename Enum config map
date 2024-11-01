@@ -1,0 +1,163 @@
+Streamline the approach by using a single enum for parameters that combines both the parameter names and the functional behavior. This way, you can eliminate redundancy and keep your code cleaner and more maintainable.
+
+Revised Approach Using One Enum with Functional Interfaces
+
+Here’s how you can create a single AppParameter enum that holds the functional logic for both App1 and App2 parameters, utilizing lambda expressions or method references for dynamic behavior.
+
+Step 1: Define the ParameterConfig Class
+
+This class remains unchanged as it defines the configuration for each parameter:
+
+public class ParameterConfig {
+    private String maskers;
+    private String rubriek;
+
+    // Getters and Setters
+    public String getMaskers() {
+        return maskers;
+    }
+
+    public void setMaskers(String maskers) {
+        this.maskers = maskers;
+    }
+
+    public String getRubriek() {
+        return rubriek;
+    }
+
+    public void setRubriek(String rubriek) {
+        this.rubriek = rubriek;
+    }
+
+    @Override
+    public String toString() {
+        return "ParameterConfig{" +
+                "maskers='" + maskers + '\'' +
+                ", rubriek='" + rubriek + '\'' +
+                '}';
+    }
+}
+
+Step 2: Define a Unified Enum with Functional Interfaces
+
+Here, we will create a single enum that can handle parameters for both applications and their associated retrieval methods.
+
+AppParameter Enum
+
+import java.util.function.Function;
+
+public enum AppParameter {
+    // Define parameters and associate them with retrieval methods
+    APP1_PARAMONE(App1Request::getParamOne),
+    APP1_PARAMTWO(App1Request::getParamTwo),
+    APP2_BIRTHDAY(App2Request::getBirthday),
+    APP2_SURNAME(App2Request::getSurname);
+
+    private final Function<BaseAppRequest, String> retrievalFunction;
+
+    AppParameter(Function<BaseAppRequest, String> retrievalFunction) {
+        this.retrievalFunction = retrievalFunction;
+    }
+
+    public String execute(BaseAppRequest request) {
+        return retrievalFunction.apply(request);
+    }
+}
+
+Step 3: Update the AppConfig Class
+
+Now we can modify the AppConfig class to use this unified enum for configuration.
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@Component
+@ConfigurationProperties(prefix = "app.applications")
+public class AppConfig {
+
+    private Map<AppParameter, ParameterConfig> parameters = new HashMap<>();
+
+    public Map<AppParameter, ParameterConfig> getParameters() {
+        return parameters;
+    }
+
+    public void setParameters(Map<AppParameter, ParameterConfig> parameters) {
+        this.parameters = parameters;
+    }
+
+    @Override
+    public String toString() {
+        return "AppConfig{" +
+                "parameters=" + parameters +
+                '}';
+    }
+}
+
+Step 4: Update the Configuration in application.yml
+
+Here's how you can define your configuration in application.yml using the unified enum.
+
+app:
+  applications:
+    parameters:
+      APP1_PARAMONE:
+        maskers: "masker1"
+        rubriek: "rubric1"
+      APP1_PARAMTWO:
+        maskers: "masker2"
+        rubriek: "rubric2"
+      APP2_BIRTHDAY:
+        maskers: "masker3"
+        rubriek: "rubric3"
+      APP2_SURNAME:
+        maskers: "masker4"
+        rubriek: "rubric4"
+
+Step 5: Update the ParameterService
+
+Now, in your service layer, you can utilize this unified enum effectively.
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+@Service
+public class ParameterService {
+
+    private final AppConfig appConfig;
+
+    @Autowired
+    public ParameterService(AppConfig appConfig) {
+        this.appConfig = appConfig;
+    }
+
+    public void processAppRequest(BaseAppRequest request) {
+        for (AppParameter param : AppParameter.values()) {
+            ParameterConfig config = appConfig.getParameters().get(param);
+
+            if (config != null) {
+                // Call the appropriate method using the enum
+                String result = param.execute(request);
+
+                // Log or use the result
+                System.out.println("Parameter: " + param);
+                System.out.println("Result: " + result);
+                System.out.println("Maskers: " + config.getMaskers() + ", Rubriek: " + config.getRubriek());
+            }
+        }
+    }
+}
+
+Summary of the Benefits
+
+Single Enum Class: The AppParameter enum handles parameters for both applications, simplifying your design.
+
+Functional Interfaces: It uses functional interfaces to dynamically call the appropriate method based on the parameter.
+
+Unified Configuration: The configuration properties are unified under a single map, making it easier to manage and access.
+
+
+This approach improves code readability, maintainability, and reduces redundancy. If you have any further questions or would like to explore more modifications, feel free to ask!
+
