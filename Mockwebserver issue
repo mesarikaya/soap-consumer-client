@@ -1,0 +1,169 @@
+MockWebServer in your unit test, that’s a great choice because it allows you to test your service with an actual HTTP request/response cycle, while still mocking the server's behavior. Below is an example of how you can modify your test to use MockWebServer to test the URI building and WebClient interaction.
+
+Steps to Use MockWebServer:
+
+1. Start MockWebServer: Initialize a MockWebServer instance that will simulate the server your WebClient will make requests to.
+
+
+2. Mock Response: You can enqueue mock responses to simulate how your service should behave when making requests to the server.
+
+
+3. Test the WebClient Request: Your test will verify that the URI is built correctly and that the WebClient call actually hits the mock server.
+
+
+
+Example Code
+
+Service Class (MyService)
+
+The MyService class remains the same as in the previous example, where it builds a URI using DefaultUriBuilderFactory and makes a request via WebClient.
+
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.util.DefaultUriBuilderFactory;
+import java.net.URI;
+
+public class MyService {
+
+    private final WebClient webClient;
+
+    public MyService(WebClient webClient) {
+        this.webClient = webClient;
+    }
+
+    public String getFromExternalService(URI baseUri, String paramValue) {
+        // Use DefaultUriBuilderFactory to build a new URI
+        DefaultUriBuilderFactory uriBuilderFactory = new DefaultUriBuilderFactory(baseUri.toString());
+        URI updatedUri = uriBuilderFactory.builder()
+                .path("/newpath")
+                .queryParam("param", paramValue)
+                .build();
+
+        // Use WebClient to call the built URI
+        return webClient.get()
+                .uri(updatedUri)
+                .retrieve()
+                .bodyToMono(String.class)
+                .block(); // Just for simplicity in this example
+    }
+}
+
+Unit Test Using MockWebServer
+
+In this test, we will:
+
+1. Start the MockWebServer to simulate the actual HTTP server.
+
+
+2. Enqueue a Mock Response to simulate the server's response.
+
+
+3. Capture and Verify the URI being passed to the WebClient.
+
+
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.web.reactive.function.client.WebClient;
+import okhttp3.mockwebserver.MockWebServer;
+import okhttp3.mockwebserver.MockResponse;
+import org.springframework.web.reactive.function.client.WebClient;
+import java.net.URI;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+public class MyServiceTest {
+
+    private MockWebServer mockWebServer;
+    private WebClient webClient;
+    private MyService myService;
+
+    @BeforeEach
+    public void setUp() throws Exception {
+        // Initialize the MockWebServer
+        mockWebServer = new MockWebServer();
+        mockWebServer.start();
+
+        // Create WebClient instance and set the base URL to the MockWebServer URL
+        webClient = WebClient.builder()
+                .baseUrl(mockWebServer.url("/").toString()) // Set the base URL to the mock server's URL
+                .build();
+
+        // Create the service instance with the mocked WebClient
+        myService = new MyService(webClient);
+    }
+
+    @Test
+    public void testGetFromExternalService() throws Exception {
+        // Given a URI as a property
+        URI baseUri = URI.create("https://www.domain.com/path?name=1");
+
+        // Enqueue a mock response
+        mockWebServer.enqueue(new MockResponse()
+                .setBody("Mock response")
+                .setResponseCode(200));
+
+        // Call the service method
+        String response = myService.getFromExternalService(baseUri, "value");
+
+        // Verify the response (mocked response from WebClient)
+        assertEquals("Mock response", response);
+
+        // Capture the URI passed to WebClient
+        String capturedUrl = mockWebServer.takeRequest().getRequestUrl().toString();
+
+        // Assert the URI was correctly built
+        assertEquals("https://www.domain.com/newpath?param=value", capturedUrl);
+    }
+
+    @AfterEach
+    public void tearDown() throws Exception {
+        // Shut down the MockWebServer
+        mockWebServer.shutdown();
+    }
+}
+
+Explanation of the Test:
+
+1. Start MockWebServer:
+
+In the setUp() method, we initialize a MockWebServer and start it. The WebClient is then configured to use the base URL of the mock server, which will simulate the real HTTP server.
+
+
+
+2. Enqueue a Mock Response:
+
+We enqueue a mock response (MockResponse) that will be returned when WebClient makes the request. This ensures that the test will not actually hit a real server, but it will still simulate a real HTTP request-response cycle.
+
+
+
+3. Call Service and Capture the URI:
+
+We call the getFromExternalService() method, which uses WebClient to send a request to the mock server with the URI built by DefaultUriBuilderFactory.
+
+The takeRequest() method is used to capture the request that was sent to the mock server, allowing us to assert the constructed URI.
+
+
+
+4. Assertions:
+
+We check that the response returned by WebClient is the expected "Mock response".
+
+We verify that the captured URI passed to the WebClient matches the expected URI, ensuring that the URI was correctly constructed with the proper path and query parameters.
+
+
+
+
+Key Points:
+
+MockWebServer: This is used to simulate an HTTP server and allow you to verify the HTTP requests sent by your WebClient.
+
+URI Building: The service uses DefaultUriBuilderFactory to build a URI, and the test verifies that the URI is constructed as expected.
+
+WebClient: The WebClient is configured to use the mock server’s base URL, and we capture the request URL sent by WebClient.
+
+
+Conclusion:
+
+This setup allows you to test your service's behavior with MockWebServer, ensuring that the URI is correctly built using DefaultUriBuilderFactory and that WebClient is correctly making requests to the mock server. This approach gives you an end-to-end test with an actual HTTP request-response cycle, but without the need for a real external server.
+
