@@ -1,0 +1,105 @@
+In MapStruct's @AfterMapping, you cannot change or return the mapped object itself. Instead, @AfterMapping is designed for modifying the already-created DTO rather than replacing or returning a new one.
+
+If you need to modify the DTO after mapping, it must be done in-place via the @MappingTarget annotation. Here’s a breakdown:
+
+
+---
+
+Why Can't You Return in @AfterMapping?
+
+MapStruct manages the object lifecycle during mapping. The @AfterMapping hook is only a post-processing step that modifies the same instance created during the mapping.
+
+If you need to perform actions that transform the object and return a new instance, you would need to handle this outside MapStruct or by using a custom method within the mapper.
+
+
+---
+
+Updated Approach Using @AfterMapping (No Return)
+
+Here’s how you can use @AfterMapping to make additional changes directly to the DTO:
+
+@Mapper(componentModel = "spring")
+public interface MyMapper {
+    @Mapping(target = "processedField", ignore = true) // Ignore processed field
+    MyDTO toDTO(MyEntity entity);
+
+    @AfterMapping
+    default void processAfterMapping(@MappingTarget MyDTO dto, @Context MyService myService) {
+        // Modify the DTO directly
+        myService.performAction(dto);
+    }
+}
+
+This approach ensures that:
+
+The dto is updated in-place.
+
+The performAction method in your service modifies the fields as needed.
+
+
+
+---
+
+Alternative: Custom Mapping Method
+
+If you must return a modified object (e.g., replacing the original DTO), you can define a custom method in the mapper interface instead of relying on @AfterMapping.
+
+@Mapper(componentModel = "spring")
+public interface MyMapper {
+
+    @Mapping(target = "processedField", ignore = true) // Ignore processed field
+    MyDTO mapToDTO(MyEntity entity);
+
+    // Custom method that combines mapping and processing
+    default MyDTO mapAndProcess(MyEntity entity, MyService myService) {
+        MyDTO dto = mapToDTO(entity); // Standard mapping
+        myService.performAction(dto); // Modify the DTO via the service
+        return dto; // Return the modified DTO
+    }
+}
+
+Usage:
+
+@Service
+public class MyApplicationService {
+
+    private final MyMapper myMapper;
+    private final MyService myService;
+
+    public MyApplicationService(MyMapper myMapper, MyService myService) {
+        this.myMapper = myMapper;
+        this.myService = myService;
+    }
+
+    public void processEntity(MyEntity entity) {
+        MyDTO dto = myMapper.mapAndProcess(entity, myService);
+        System.out.println(dto);
+    }
+}
+
+
+---
+
+Choosing the Right Approach:
+
+1. Use @AfterMapping if:
+
+You want to modify the same DTO instance.
+
+You don’t need to replace or return a new DTO.
+
+
+
+2. Use a Custom Method if:
+
+You need to return a completely transformed DTO.
+
+You want the flexibility to orchestrate mapping and processing together.
+
+
+
+
+
+---
+
+Would you prefer more details on either approach?
