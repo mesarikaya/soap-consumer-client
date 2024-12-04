@@ -1,0 +1,155 @@
+Setting up a Redis Cluster in Minikube using Helm Charts is a straightforward way to test and manage a distributed caching system in Kubernetes. Here's how you can achieve it:
+
+
+---
+
+1. Prerequisites
+
+1. Install Minikube: Ensure you have Minikube installed and running.
+
+minikube start
+
+
+2. Install Helm: Ensure Helm is installed and configured.
+
+curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+
+
+3. Enable Ingress in Minikube (Optional):
+
+minikube addons enable ingress
+
+
+
+
+---
+
+2. Use Bitnami's Redis Helm Chart
+
+The Bitnami Redis Helm Chart supports both standalone and cluster configurations.
+
+Step 1: Add the Bitnami Repository
+
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update
+
+Step 2: Install Redis Cluster
+
+Use the following command to deploy a Redis Cluster:
+
+helm install redis-cluster bitnami/redis \
+  --set architecture=replication \
+  --set cluster.enabled=true \
+  --set cluster.slaveCount=3 \
+  --set global.storageClass=standard
+
+architecture=replication: Sets up Redis in master-slave mode.
+
+cluster.enabled=true: Enables Redis Cluster mode.
+
+cluster.slaveCount=3: Specifies the number of slaves for the cluster.
+
+global.storageClass=standard: Uses the default Minikube storage class.
+
+
+
+---
+
+Step 3: Verify the Installation
+
+1. Check Redis Pods:
+
+kubectl get pods
+
+Example output:
+
+NAME                            READY   STATUS    RESTARTS   AGE
+redis-cluster-master-0          1/1     Running   0          1m
+redis-cluster-slave-0           1/1     Running   0          1m
+redis-cluster-slave-1           1/1     Running   0          1m
+redis-cluster-slave-2           1/1     Running   0          1m
+
+
+2. Check Services:
+
+kubectl get svc
+
+Example output:
+
+NAME                            TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)    AGE
+redis-cluster-headless          ClusterIP   None           <none>        6379/TCP   1m
+redis-cluster                   ClusterIP   10.96.0.10     <none>        6379/TCP   1m
+
+
+
+
+---
+
+3. Configure Spring Boot to Use the Redis Cluster
+
+In your Spring Boot application, configure the application.yml file to connect to the Redis Cluster:
+
+Example Configuration:
+
+spring:
+  redis:
+    cluster:
+      nodes:
+        - redis-cluster-master-0.redis-cluster-headless.default.svc.cluster.local:6379
+        - redis-cluster-slave-0.redis-cluster-headless.default.svc.cluster.local:6379
+        - redis-cluster-slave-1.redis-cluster-headless.default.svc.cluster.local:6379
+        - redis-cluster-slave-2.redis-cluster-headless.default.svc.cluster.local:6379
+
+The hostnames follow the Kubernetes service DNS convention.
+
+Replace default with the namespace if Redis is deployed in a custom namespace.
+
+
+
+---
+
+4. Scale the Redis Cluster
+
+To scale the cluster (e.g., increase the number of slaves):
+
+helm upgrade redis-cluster bitnami/redis --set cluster.slaveCount=5
+
+
+---
+
+5. Expose Redis for External Access
+
+If you want to access Redis from outside the cluster:
+
+1. Update the Helm command to expose Redis as a LoadBalancer:
+
+helm install redis-cluster bitnami/redis \
+  --set architecture=replication \
+  --set cluster.enabled=true \
+  --set cluster.slaveCount=3 \
+  --set service.type=LoadBalancer
+
+
+2. Get the external IP:
+
+kubectl get svc redis-cluster
+
+
+
+
+---
+
+6. Clean Up
+
+To delete the Redis Cluster:
+
+helm uninstall redis-cluster
+
+To delete the Minikube cluster:
+
+minikube delete
+
+
+---
+
+This setup ensures a fully functional Redis Cluster on Minikube, ready to be used in your Spring Boot microservices. Let me know if you'd like help with testing or advanced configurations!
