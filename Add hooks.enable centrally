@@ -1,0 +1,111 @@
+Unfortunately, Hooks.enableAutomaticContextPropagation() cannot be added centrally in a way that automatically applies across all microservices in a Spring Cloud-based distributed system. It must be called within each individual service where you're dealing with reactive programming (e.g., WebFlux, Reactor) or asynchronous tasks (@Async). However, there are some strategies you can implement to simplify its configuration across multiple services.
+
+Potential Approaches to Apply Hooks.enableAutomaticContextPropagation() More Centrally
+
+1. Shared Configuration in a Common Library
+
+To centralize the configuration for multiple microservices, you can create a common shared library that includes the necessary setup (like enabling Hooks.enableAutomaticContextPropagation()). This library can be added as a dependency in all your microservices.
+
+Here’s how you can implement this approach:
+
+Create a shared module or common library in your project.
+
+Inside this module, add a class that contains the necessary Sleuth configuration (including the Hooks.enableAutomaticContextPropagation() method).
+
+Every microservice can then include this shared module as a dependency.
+
+
+Example of Shared Module (Common Library)
+
+1. Create a Common Library
+
+// In your common module (e.g., `common-tracing` library)
+
+import org.springframework.context.annotation.Configuration;
+import reactor.core.publisher.Hooks;
+
+@Configuration
+public class TraceConfig {
+
+    public TraceConfig() {
+        // Enable context propagation for reactive and async processing
+        Hooks.enableAutomaticContextPropagation();
+    }
+}
+
+2. Add the Common Library to Each Microservice
+
+In each microservice's pom.xml or build.gradle, add the dependency for the common tracing library:
+
+Maven:
+
+<dependency>
+    <groupId>com.example</groupId>
+    <artifactId>common-tracing</artifactId>
+    <version>1.0.0</version>
+</dependency>
+
+Gradle:
+
+implementation 'com.example:common-tracing:1.0.0'
+
+3. Every Service Will Automatically Have the Hook Enabled
+
+Once you add the shared library to each microservice, the TraceConfig class will be automatically applied when the application starts, and Hooks.enableAutomaticContextPropagation() will be invoked, ensuring that trace context is propagated in all asynchronous and reactive tasks.
+
+
+---
+
+2. Use Spring Boot Auto Configuration
+
+You can create an auto-configuration class that enables Hooks.enableAutomaticContextPropagation() and includes it in your shared module. This way, Spring Boot will automatically apply the configuration for you without needing to manually call TraceConfig in every service.
+
+Example of Auto-Configuration Class
+
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import reactor.core.publisher.Hooks;
+
+@Configuration
+@ConditionalOnClass(Hooks.class)  // Ensures this configuration only loads if `Hooks` is present
+public class SleuthContextPropagationAutoConfiguration {
+
+    @Bean
+    public void enableContextPropagation() {
+        Hooks.enableAutomaticContextPropagation();
+    }
+}
+
+This configuration will automatically apply the hook when any service includes the common module, and Sleuth will propagate trace context across reactive or async tasks.
+
+
+
+---
+
+Advantages of This Approach
+
+Centralized Management: You manage the configuration in a central location (the common module or auto-configuration), making it easy to maintain across multiple services.
+
+Reusable: By creating a shared module or auto-configuration, you can reuse this logic in all services without needing to duplicate code.
+
+Consistency: Ensures all microservices are configured consistently with the same tracing logic, reducing the chances of misconfiguration.
+
+
+Considerations
+
+Microservices with Different Requirements: If some services require different configurations for trace context propagation (e.g., some might not need to propagate trace context for async tasks), you might need additional conditions or configurations in the shared library to handle these cases.
+
+Version Compatibility: Ensure that the shared library or auto-configuration works with the version of Spring Cloud Sleuth and Spring Boot you're using across your microservices.
+
+
+Conclusion
+
+While you can't apply Hooks.enableAutomaticContextPropagation() globally across all microservices in a distributed system directly, you can centralize the configuration by:
+
+Creating a shared module or common library.
+
+Using Spring Boot auto-configuration to automatically apply the context propagation configuration.
+
+
+This way, you reduce the effort of manually enabling the propagation hook in every microservice and ensure consistency across your entire system.
