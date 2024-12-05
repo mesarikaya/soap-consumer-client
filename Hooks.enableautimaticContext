@@ -1,0 +1,238 @@
+Here's how the solution would look using Spring Cloud Sleuth for distributed tracing with asynchronous operations in a Spring Boot application.
+
+Solution Overview Using Spring Cloud Sleuth
+
+1. Sleuth for Distributed Tracing: Sleuth will automatically manage and propagate trace information (like traceId, spanId) across HTTP requests and asynchronous tasks.
+
+
+2. Spring Async Support: Sleuth integrates seamlessly with Spring's @Async support, ensuring that trace context is passed along when asynchronous tasks are executed.
+
+
+3. Logging Trace Information: Sleuth will automatically add trace information (traceId, spanId) to logs for correlation across services and threads.
+
+
+4. Inter-Service Communication: When one service calls another via HTTP, Sleuth ensures that trace information (like traceId, spanId) is passed along via HTTP headers.
+
+
+
+Steps to Implement
+
+1. Add Dependencies
+
+First, make sure you have the necessary dependencies in your pom.xml or build.gradle file for Spring Cloud Sleuth.
+
+Maven Dependencies:
+
+<dependencies>
+    <!-- Spring Web (MVC) -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+
+    <!-- Spring Async support -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-aop</artifactId>
+    </dependency>
+
+    <!-- Spring Cloud Sleuth for distributed tracing -->
+    <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-starter-sleuth</artifactId>
+    </dependency>
+
+    <!-- Optional: Micrometer tracing integration -->
+    <dependency>
+        <groupId>io.micrometer</groupId>
+        <artifactId>micrometer-tracing-bridge-brave</artifactId>
+    </dependency>
+
+    <!-- Optional: Logback for logging -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-logging</artifactId>
+    </dependency>
+</dependencies>
+
+Gradle Dependencies:
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-aop'
+    implementation 'org.springframework.cloud:spring-cloud-starter-sleuth'
+    implementation 'io.micrometer:micrometer-tracing-bridge-brave'
+    implementation 'org.springframework.boot:spring-boot-starter-logging'  // Optional for logging
+}
+
+2. Enable Async and Sleuth in Spring Boot Application
+
+In your main Spring Boot application class, enable @Async and initialize Sleuth with the necessary configuration.
+
+Main Application Class:
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import reactor.core.publisher.Hooks;
+import org.springframework.scheduling.annotation.EnableAsync;
+
+@SpringBootApplication
+@EnableAsync
+public class MySpringBootApplication {
+
+    public static void main(String[] args) {
+        // Enable automatic context propagation for async tasks
+        Hooks.enableAutomaticContextPropagation();
+
+        SpringApplication.run(MySpringBootApplication.class, args);
+    }
+}
+
+@EnableAsync: Enables asynchronous processing in your Spring Boot application.
+
+Hooks.enableAutomaticContextPropagation(): Ensures that trace context (like traceId and spanId) is propagated in asynchronous tasks, especially when using @Async.
+
+
+3. Define an Async Service
+
+Create a service that uses asynchronous methods annotated with @Async to execute tasks in parallel. This service will also use Sleuth to propagate trace context.
+
+Async Service Example:
+
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+@Service
+public class MyAsyncService {
+
+    private static final Logger log = LoggerFactory.getLogger(MyAsyncService.class);
+
+    @Async
+    public void executeAsyncTask() {
+        // Trace information (traceId, spanId) will be propagated automatically by Sleuth
+        log.info("Executing async task");
+
+        // Simulate some work
+        try {
+            Thread.sleep(500);  // Simulate async work
+        } catch (InterruptedException e) {
+            log.error("Error during async task", e);
+        }
+    }
+}
+
+The @Async annotation ensures that executeAsyncTask runs in a separate thread. Sleuth automatically propagates the trace context across this asynchronous execution.
+
+
+4. Propagate Trace Context in HTTP Requests
+
+If your service calls another service (e.g., using RestTemplate or WebClient), Sleuth automatically propagates trace context (like traceId, spanId) in the HTTP headers.
+
+HTTP Call Example with RestTemplate:
+
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+
+@Service
+public class MyService {
+
+    private final RestTemplate restTemplate;
+
+    public MyService(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
+    }
+
+    public void callAnotherService() {
+        String response = restTemplate.getForObject("http://other-service", String.class);
+        // Use the response as needed
+    }
+}
+
+With Sleuth enabled, it will automatically attach trace context to HTTP requests, including X-B3-TraceId and X-B3-SpanId.
+
+5. Logging Trace Information
+
+To include traceId and spanId in your logs, Sleuth automatically integrates with MDC (Mapped Diagnostic Context) and ensures that these values are available for logging.
+
+Logback Configuration (logback.xml):
+
+<configuration>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%thread] [%X{traceId:-NO_TRACE}] [%X{spanId:-NO_SPAN}] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE" />
+    </root>
+</configuration>
+
+%X{traceId} and %X{spanId} will automatically extract the trace context from MDC (which is managed by Sleuth) and include it in the logs.
+
+
+6. Inter-Service Communication (Optional)
+
+If your service communicates with other microservices via HTTP, Sleuth ensures that trace headers (like X-B3-TraceId) are automatically propagated.
+
+For example, when you make a request from one service to another, the trace context (including traceId, spanId) is added to the HTTP request headers.
+
+Example with WebClient:
+
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.stereotype.Service;
+
+@Service
+public class MyWebClientService {
+
+    private final WebClient.Builder webClientBuilder;
+
+    public MyWebClientService(WebClient.Builder webClientBuilder) {
+        this.webClientBuilder = webClientBuilder;
+    }
+
+    public void callOtherService() {
+        webClientBuilder.baseUrl("http://other-service")
+                        .get()
+                        .retrieve()
+                        .bodyToMono(String.class)
+                        .doOnTerminate(() -> log.info("WebClient request finished"))
+                        .subscribe();
+    }
+}
+
+When making HTTP calls using WebClient, Sleuth will automatically propagate the tracing headers (traceId, spanId), allowing for end-to-end trace correlation.
+
+
+7. Verify and Test the Solution
+
+When you send a request to your microservice, check the logs for traceId and spanId.
+
+If the request is asynchronous or if the service calls another service, ensure that the trace context is correctly propagated.
+
+The logs should contain the trace information for every step of the request, including async execution and HTTP requests to other services.
+
+
+Summary of Key Features with Sleuth
+
+1. Automatic Trace Context Propagation: Sleuth automatically propagates traceId and spanId through HTTP headers and asynchronous tasks.
+
+
+2. Integration with Spring's @Async: Trace context is propagated through threads and async tasks without additional code.
+
+
+3. Log Correlation: Sleuth integrates with MDC for logging and ensures trace information (traceId, spanId) is included in logs.
+
+
+4. Distributed Tracing: Sleuth integrates with tracing systems like Zipkin and Jaeger for visualizing traces across services.
+
+
+5. Ease of Use: No need for manual context propagation; Sleuth handles everything for you out of the box.
+
+
+
+By using Spring Cloud Sleuth, you significantly simplify trace context management and logging, making it much easier to follow requests and debug issues in a distributed microservices architecture.
+
