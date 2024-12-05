@@ -1,0 +1,223 @@
+To integrate context propagation for logging and tracing in a Spring Web microservices architecture with asynchronous operations, you can follow these steps to ensure that traceId and spanId are passed correctly through asynchronous requests, especially when you're using Spring MVC (with @Async) and Spring Web.
+
+The key goal here is to propagate tracing context (like traceId, spanId) through all asynchronous operations and across microservices, especially for logging and debugging purposes.
+
+Here’s how you can approach it:
+
+1. Set Up Spring Boot with Micrometer and Sleuth
+
+First, ensure you have the right dependencies in your pom.xml or build.gradle for Micrometer Tracing and Spring Cloud Sleuth (for distributed tracing).
+
+Maven Dependencies
+
+<dependencies>
+    <!-- Spring Web (MVC) -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+
+    <!-- Spring Async -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-aop</artifactId>
+    </dependency>
+
+    <!-- Sleuth for Distributed Tracing -->
+    <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-starter-sleuth</artifactId>
+    </dependency>
+
+    <!-- Micrometer tracing bridge for Sleuth -->
+    <dependency>
+        <groupId>io.micrometer</groupId>
+        <artifactId>micrometer-tracing-bridge-brave</artifactId>
+    </dependency>
+
+    <!-- Optional: Logback for logging -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-logging</artifactId>
+    </dependency>
+</dependencies>
+
+2. Enable @Async for Asynchronous Execution
+
+Make sure you have enabled asynchronous execution for your services. This will allow you to process requests asynchronously using @Async.
+
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.stereotype.Service;
+
+@EnableAsync
+@SpringBootApplication
+public class MySpringBootApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(MySpringBootApplication.class, args);
+    }
+}
+
+You can create services with @Async annotation to indicate that the methods should run asynchronously.
+
+Async Service Example
+
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+@Service
+public class MyAsyncService {
+
+    private static final Logger log = LoggerFactory.getLogger(MyAsyncService.class);
+
+    @Async
+    public void executeAsyncTask() {
+        log.info("Executing async task");
+        // Perform long-running task
+    }
+}
+
+3. Enable Trace Context Propagation (For Asynchronous Calls)
+
+By default, traceId and spanId are propagated through Spring Web and Sleuth for synchronous calls. However, for asynchronous tasks (@Async methods), you need to ensure the trace context is passed along, especially across threads. This is where Reactor context propagation comes into play.
+
+Use Hooks.enableAutomaticContextPropagation()
+
+For @Async to work seamlessly with trace context (i.e., traceId, spanId), you need to enable context propagation for asynchronous tasks that are not part of a reactive framework like WebFlux but are still executed asynchronously using Java's ExecutorService or Spring's @Async.
+
+To achieve this, enable automatic context propagation globally in your Spring Boot application by using Hooks.enableAutomaticContextPropagation().
+
+In your main application class or configuration:
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import reactor.core.publisher.Hooks;
+
+@SpringBootApplication
+public class MySpringBootApplication {
+
+    public static void main(String[] args) {
+        // Enable automatic context propagation in all threads (important for async tasks)
+        Hooks.enableAutomaticContextPropagation();
+
+        SpringApplication.run(MySpringBootApplication.class, args);
+    }
+
+    @Bean
+    public MyAsyncService myAsyncService() {
+        return new MyAsyncService();
+    }
+}
+
+This ensures that any new threads or asynchronous operations that are started by Spring's @Async (or any other async mechanism) will automatically carry over the trace context.
+
+
+---
+
+4. Configure Logback for Tracing in Logs
+
+To log traceId and spanId, you need to make sure your logback.xml (or application.properties) is set up correctly to capture and display the trace details.
+
+logback.xml Configuration
+
+<configuration>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%thread] [%X{traceId:-NO_TRACE}] [%X{spanId:-NO_SPAN}] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE" />
+    </root>
+</configuration>
+
+This will output traceId and spanId in the logs, helping you track the requests as they move through different services and threads.
+
+5. Handle Distributed Tracing Across Microservices
+
+When your microservices interact with each other (e.g., via REST calls), Sleuth will automatically propagate the traceId and spanId via HTTP headers (e.g., X-B3-TraceId, X-B3-SpanId).
+
+To make sure the tracing headers are passed along in outgoing HTTP requests (for example, when one microservice calls another), Sleuth automatically adds the trace context to the HTTP headers. If you are using Spring Web's RestTemplate or WebClient, this is handled for you.
+
+For example, with WebClient (if you are using WebFlux), it will automatically propagate the tracing context across services:
+
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.stereotype.Service;
+
+@Service
+public class MyService {
+
+    private final WebClient.Builder webClientBuilder;
+
+    public MyService(WebClient.Builder webClientBuilder) {
+        this.webClientBuilder = webClientBuilder;
+    }
+
+    public void callOtherService() {
+        webClientBuilder.baseUrl("http://other-service")
+                        .get()
+                        .retrieve()
+                        .bodyToMono(String.class)
+                        .subscribe(response -> {
+                            // Do something with the response
+                        });
+    }
+}
+
+For RestTemplate (if not using WebClient): Sleuth will automatically inject the tracing context in the HTTP headers for RestTemplate as well.
+
+import org.springframework.web.client.RestTemplate;
+import org.springframework.stereotype.Service;
+
+@Service
+public class MyService {
+
+    private final RestTemplate restTemplate;
+
+    public MyService(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
+    }
+
+    public void callOtherService() {
+        String response = restTemplate.getForObject("http://other-service", String.class);
+        // Do something with the response
+    }
+}
+
+Ensure that both microservices are configured with Sleuth, so the tracing headers (X-B3-TraceId, X-B3-SpanId) are automatically propagated.
+
+
+---
+
+6. Verify and Test
+
+When you send a request to the microservice, the traceId and spanId should be propagated across asynchronous tasks, both within the service and when calling other services.
+
+You should see the trace information (traceId, spanId) in the logs for each service, as they process the request.
+
+Test this by sending requests to your endpoints and checking logs for consistent trace and span IDs.
+
+
+Summary
+
+1. Enable Micrometer Tracing and Sleuth for distributed tracing.
+
+
+2. Use @Async in Spring services for asynchronous operations and enable automatic context propagation with Hooks.enableAutomaticContextPropagation().
+
+
+3. Use WebClient or RestTemplate for inter-service communication, which will automatically propagate tracing context across HTTP requests.
+
+
+4. Configure Logback to log traceId and spanId.
+
+
+5. Test to ensure that traceId and spanId appear in logs and are propagated across threads and services.
+
+
+
+With these steps, you should be able to maintain consistent distributed tracing across microservices, even with asynchronous operations, allowing you to track requests and debug across services seamlessly.
