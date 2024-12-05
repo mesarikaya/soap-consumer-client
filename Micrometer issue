@@ -1,0 +1,439 @@
+If you're using Brave (a Spring Observability library) for distributed tracing in your Spring Boot 3.0.13 application, the issue of missing logs may arise due to context propagation, incorrect logging configurations, or incompatibility after the upgrade. Brave integrates well with Micrometer but requires proper setup for tracing and logging to function consistently.
+
+Here’s how you can resolve the problem while using Brave:
+
+
+---
+
+1. Ensure Dependencies
+
+After upgrading to Spring Boot 3.x, make sure you include the required Brave and Micrometer tracing dependencies. If you're using Brave with Micrometer, you need the micrometer-tracing-bridge-brave dependency.
+
+Maven Dependencies:
+
+<dependency>
+    <groupId>io.micrometer</groupId>
+    <artifactId>micrometer-tracing-bridge-brave</artifactId>
+</dependency>
+<dependency>
+    <groupId>io.zipkin.reporter2</groupId>
+    <artifactId>zipkin-reporter-brave</artifactId>
+</dependency>
+<dependency>
+    <groupId>ch.qos.logback</groupId>
+    <artifactId>logback-classic</artifactId>
+</dependency>
+
+These ensure:
+
+micrometer-tracing-bridge-brave integrates Brave with Micrometer's observation APIs.
+
+zipkin-reporter-brave sends spans to a tracing backend (e.g., Zipkin or OpenTelemetry).
+
+
+
+---
+
+2. Configure Brave Tracing
+
+Set up Brave tracing in your application to propagate trace context properly across threads and service boundaries.
+
+Example Configuration:
+
+import brave.Tracing;
+import brave.handler.SpanHandler;
+import brave.propagation.CurrentTraceContext;
+import brave.propagation.TraceContext;
+import brave.sampler.Sampler;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class BraveConfig {
+
+    @Bean
+    public Tracing tracing() {
+        return Tracing.newBuilder()
+                .currentTraceContext(CurrentTraceContext.Default.create())
+                .sampler(Sampler.ALWAYS_SAMPLE) // Adjust sampling if needed
+                .addSpanHandler(new CustomSpanHandler()) // Optional custom span handling
+                .build();
+    }
+}
+
+
+---
+
+3. Logging with Trace Context
+
+To ensure logs include trace and span IDs, update your logging pattern in logback.xml or application.yml.
+
+Logback Configuration (logback.xml):
+
+<configuration>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%X{traceId:-}] [%X{spanId:-}] [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE" />
+    </root>
+</configuration>
+
+Explanation:
+
+%X{traceId:-}: Adds the trace ID to logs.
+
+%X{spanId:-}: Adds the span ID to logs.
+
+
+Brave automatically propagates trace and span IDs into the MDC (Mapped Diagnostic Context), making them available for logging.
+
+
+---
+
+4. Context Propagation
+
+If logs are generated in asynchronous contexts (e.g., threads, reactive streams), you might lose trace context. Use Brave’s CurrentTraceContext to propagate the context.
+
+Example with Executor Service:
+
+import brave.propagation.CurrentTraceContext;
+
+@Bean
+public Executor taskExecutor(CurrentTraceContext currentTraceContext) {
+    return currentTraceContext.executorService(Executors.newFixedThreadPool(10));
+}
+
+This ensures the trace context is available across thread boundaries.
+
+Example with Reactor Context:
+
+If you're using Project Reactor, enable tracing using reactor's ReactorCurrentTraceContext:
+
+@Bean
+public ReactorCurrentTraceContext reactorCurrentTraceContext(CurrentTraceContext currentTraceContext) {
+    return ReactorCurrentTraceContext.create(currentTraceContext);
+}
+
+
+---
+
+5. Sampling Configuration
+
+If you’re missing logs due to trace sampling, adjust Brave’s sampling rate. By default, Brave samples only a subset of traces to minimize overhead.
+
+Always-On Sampling:
+
+@Bean
+public Tracing tracing() {
+    return Tracing.newBuilder()
+            .sampler(Sampler.ALWAYS_SAMPLE) // Samples 100% of traces
+            .build();
+}
+
+
+---
+
+6. Debugging Missing Logs
+
+Enable DEBUG logging for Brave to identify issues:
+
+logging:
+  level:
+    brave: DEBUG
+    org.springframework: DEBUG
+    io.micrometer: DEBUG
+
+Look for log entries indicating trace context propagation issues.
+
+Check whether trace IDs are included in logs.
+
+
+
+---
+
+7. Use Micrometer’s Observation API (Optional)
+
+Brave integrates with Micrometer’s Observation API. Use this API to manually create or attach spans where needed.
+
+Example:
+
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
+
+@RestController
+public class ObservationController {
+
+    private final ObservationRegistry observationRegistry;
+
+    public ObservationController(ObservationRegistry observationRegistry) {
+        this.observationRegistry = observationRegistry;
+    }
+
+    @GetMapping("/test")
+    public String testTracing() {
+        return Observation.createNotStarted("test.operation", observationRegistry)
+                .observe(() -> {
+                    log.info("Observation log with trace context.");
+                    return "Hello, Tracing!";
+                });
+    }
+}
+
+
+---
+
+8. Verify Propagation through Gateways
+
+If your application is behind a gateway, ensure trace headers (traceId, spanId) are forwarded. For example, with Spring Cloud Gateway:
+
+spring:
+  cloud:
+    gateway:
+      routes:
+        - id: service_route
+          uri: http://downstream-service
+          predicates:
+            - Path=/api/**
+          filters:
+            - RewritePath=/api/(?<segment>.*), /${segment}
+            - AddRequestHeader=X-B3-TraceId, {traceId}
+            - AddRequestHeader=X-B3-SpanId, {spanId}
+
+Brave uses B3 headers by default (X-B3-TraceId, X-B3-SpanId).
+
+
+---
+
+Summary
+
+To fix missing logs:
+
+1. Include micrometer-tracing-bridge-brave and related dependencies.
+
+
+2. Configure Brave to propagate context and sample traces.
+
+
+3. Update your logging configuration to include trace and span IDs.
+
+
+4. Ensure trace context propagates across threads and through gateways.
+
+
+5. Adjust sampling settings to ensure sufficient trace coverage.
+
+
+
+If logs are still missing, share specific scenarios, and I can help debug further!
+
+
+
+
+
+Upgrading to Spring Boot 3.x and associated Micrometer 1.10+ (or later) can introduce changes in how log tracing and observation work, potentially causing issues such as missing logs. Let’s troubleshoot and resolve this issue step-by-step.
+
+
+---
+
+Why Logs Might Be Missing
+
+1. Micrometer Changes:
+Micrometer 1.10 introduced changes in tracing behavior. For instance, it uses otel (OpenTelemetry) for tracing and logging by default. If your setup isn't fully aligned with OpenTelemetry's requirements, some traces might not propagate correctly.
+
+
+2. Incomplete Context Propagation:
+If logs are generated outside the scope of a traced request, the tracing context might not be properly attached to those logs.
+
+
+3. Incompatible Logging Configuration:
+If you're missing configurations for Slf4j/Logback or the OpenTelemetry logging exporter, logs might not include tracing information.
+
+
+4. Sampling Configuration:
+The trace sampling rate might be set too low (e.g., 0 disables tracing for most requests), causing logs to appear missing when they’re actually not being traced.
+
+
+5. Log Format Mismatch:
+Your logging format might not display trace IDs, making it seem as if trace-related logs are missing.
+
+
+
+
+---
+
+How to Resolve
+
+1. Verify Dependencies
+
+Make sure the necessary dependencies for Micrometer, OpenTelemetry, and logging are present in your pom.xml or build.gradle.
+
+For Maven:
+
+<dependency>
+    <groupId>io.micrometer</groupId>
+    <artifactId>micrometer-tracing-bridge-otel</artifactId>
+</dependency>
+<dependency>
+    <groupId>io.opentelemetry</groupId>
+    <artifactId>opentelemetry-exporter-logging</artifactId>
+</dependency>
+<dependency>
+    <groupId>ch.qos.logback</groupId>
+    <artifactId>logback-classic</artifactId>
+</dependency>
+
+2. Enable OpenTelemetry for Tracing
+
+Micrometer relies on OpenTelemetry to provide log tracing. Configure OpenTelemetry in your application properties:
+
+management:
+  tracing:
+    enabled: true # Enable tracing
+  metrics:
+    export:
+      simple:
+        enabled: true # Enable metrics for debugging
+
+Ensure your application is configured to export OpenTelemetry traces:
+
+otel:
+  exporter:
+    logging:
+      enabled: true # Log traces to the console
+  trace:
+    sampler: always_on # Enable tracing for all requests
+
+3. Update Logging Configuration
+
+If you're using Slf4j or Logback, ensure the logging pattern includes the trace and span IDs. Update logback.xml or application.yml for consistent tracing information.
+
+Logback Configuration (logback.xml):
+
+<configuration>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%X{traceId:-}] [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE" />
+    </root>
+</configuration>
+
+Logback Pattern Explanation:
+
+%X{traceId:-}: Includes the trace ID in logs if available.
+
+
+4. Check Trace Context Propagation
+
+Logs might be missing because the trace context is not propagating properly across threads or services. Use Micrometer’s Observation API to manually propagate context where necessary.
+
+Example with Observations:
+
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
+
+@RestController
+@RequestMapping("/example")
+public class ExampleController {
+
+    private final ObservationRegistry observationRegistry;
+
+    public ExampleController(ObservationRegistry observationRegistry) {
+        this.observationRegistry = observationRegistry;
+    }
+
+    @GetMapping
+    public String example() {
+        return Observation.createNotStarted("example.observation", observationRegistry)
+                .observe(() -> {
+                    // Your logic here
+                    log.info("Example log with trace context.");
+                    return "Hello, world!";
+                });
+    }
+}
+
+5. Adjust Sampling Rate
+
+Logs might be missed because sampling rates are too restrictive. By default, OpenTelemetry may not trace all requests. Ensure you’re using an appropriate sampler configuration.
+
+Enable Always-On Sampling:
+
+@Bean
+public SamplerProvider samplerProvider() {
+    return SamplerProvider.alwaysOn();
+}
+
+Alternatively, adjust the sampling probability:
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0 # 100% sampling rate
+
+6. Verify Gateway and Downstream Propagation
+
+If your service is behind a gateway, ensure that trace headers (traceparent, tracestate) are being forwarded correctly.
+
+Spring Cloud Gateway Example:
+
+spring:
+  cloud:
+    gateway:
+      routes:
+        - id: service_route
+          uri: http://downstream-service
+          predicates:
+            - Path=/api/**
+          filters:
+            - PreserveHostHeader=true
+            - RewritePath=/api/(?<segment>.*), /${segment}
+
+
+---
+
+Debugging Missing Logs
+
+1. Enable Debug Logs:
+Temporarily enable debug logs for tracing and Micrometer to investigate issues.
+
+logging:
+  level:
+    io.micrometer: DEBUG
+    io.opentelemetry: DEBUG
+
+
+2. Inspect Trace Context:
+Check whether trace context (trace IDs and span IDs) is attached to all logs. Missing IDs indicate a context propagation issue.
+
+
+3. Test with a Simple Service:
+Simplify your service (without a gateway or complex threading) to ensure tracing works in isolation. Gradually reintroduce complexity to identify the breaking point.
+
+
+
+
+---
+
+Summary
+
+Ensure correct dependencies and configuration for Micrometer and OpenTelemetry.
+
+Verify trace context propagation and logging formats.
+
+Adjust sampling rates to ensure sufficient tracing.
+
+Forward trace headers correctly through your gateway.
+
+
+If logs are still missing, you can share more specifics (e.g., log patterns, where logs are missing), and I’ll help debug further!
+
+
+
