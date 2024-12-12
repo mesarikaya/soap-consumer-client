@@ -1,0 +1,116 @@
+If you're using Bitnami's Redis Cluster Helm chart with ArgoCD and encountering this issue, here's a tailored approach to fix it:
+
+
+---
+
+1. Understand the Default Behavior of Bitnami Redis Cluster
+
+By default, the Bitnami Redis Helm chart:
+
+Restricts connections to the Redis pods to internal Kubernetes networking.
+
+Enables authentication with a password.
+
+Uses headless services and StatefulSets for cluster deployment.
+
+
+The potential attack message happens because the Redis configuration doesn't recognize the external localhost (from port-forwarding) as a valid cluster member.
+
+
+
+---
+
+2. Fixing Connection Issue
+
+To connect via kubectl port-forward, you need to modify some Redis configuration settings:
+
+Update Helm Chart Values
+
+You can override the default Helm chart values using a values.yaml file when deploying with ArgoCD. Add the following updates:
+
+auth:
+  enabled: true
+  password: YOUR_STRONG_PASSWORD
+
+cluster:
+  enabled: true
+  externalAccess:
+    enabled: true
+    service:
+      type: ClusterIP
+      ports:
+        redis: 6379
+
+# Allow connections from 0.0.0.0 (localhost for port-forwarded connections)
+networkPolicy:
+  enabled: false
+
+service:
+  annotations: {}
+  type: ClusterIP
+  ports:
+    redis: 6379
+
+Key Changes:
+
+auth.enabled: Ensures Redis authentication is on.
+
+cluster.externalAccess: Configures external access for your cluster.
+
+networkPolicy.enabled: Disables network restrictions temporarily for debugging.
+
+service.type: Keeps it as ClusterIP for internal communication.
+
+
+Deploy the updated chart using ArgoCD.
+
+
+---
+
+3. Port-Forward a Redis Master Node
+
+Once deployed, find a Redis master pod and port-forward it:
+
+kubectl get pods -n YOUR_NAMESPACE -l app.kubernetes.io/component=master
+
+Then, port-forward the master pod:
+
+kubectl port-forward -n YOUR_NAMESPACE POD_NAME 6379:6379
+
+
+---
+
+4. Connect to Redis Locally
+
+Use the Redis CLI to connect to the forwarded Redis instance:
+
+redis-cli -h 127.0.0.1 -p 6379 -a YOUR_STRONG_PASSWORD
+
+If you're using an application to connect, make sure it includes the password in the connection string.
+
+
+---
+
+5. Check Redis Logs
+
+If the issue persists, check the logs of the Redis pods to identify the cause:
+
+kubectl logs -n YOUR_NAMESPACE POD_NAME
+
+Look for any connection-related errors or warnings.
+
+
+---
+
+6. Revert Debug Changes
+
+Once the connection is successful, ensure you tighten the security by re-enabling the network policy:
+
+networkPolicy:
+  enabled: true
+
+Apply these changes and redeploy via ArgoCD.
+
+
+---
+
