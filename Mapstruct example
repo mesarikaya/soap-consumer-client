@@ -1,0 +1,145 @@
+
+---
+
+D:
+
+List<H> names
+
+List<K> methods
+
+
+E:
+
+List<F> attributes
+
+List<P> methods
+
+
+Map:
+
+E.attributes (List<F>) → D.names (List<H>)
+
+via a service that maps each F → H by looking up H using F.id
+
+
+E.methods (List<P>) → D.methods (List<K>)
+
+via a service that either fetches existing or creates new K by uniqueAttribute
+
+
+
+
+
+---
+
+Full example
+
+
+---
+
+Entities and DTOs (simplified)
+
+public class F {
+    private UUID id;
+    // other fields
+}
+
+public class H {
+    private UUID id;
+    // other fields
+}
+
+public class P {
+    private String uniqueAttribute;
+    // other fields
+}
+
+@Entity
+public class K {
+    @Id
+    @GeneratedValue
+    private Long id;
+
+    @Column(unique = true, nullable = false)
+    private String uniqueAttribute;
+
+    // other fields
+}
+
+
+---
+
+Resolvers
+
+@Service
+public class FToHResolver {
+
+    private final HRepository hRepository;
+
+    public FToHResolver(HRepository hRepository) {
+        this.hRepository = hRepository;
+    }
+
+    @Named("mapFtoH")
+    public H map(F f) {
+        if (f == null || f.getId() == null) return null;
+        return hRepository.findById(f.getId()).orElse(null);
+    }
+}
+
+@Service
+public class PToKResolver {
+
+    private final KRepository kRepository;
+
+    public PToKResolver(KRepository kRepository) {
+        this.kRepository = kRepository;
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    @Named("resolveK")
+    public K map(P p) {
+        if (p == null || p.getUniqueAttribute() == null) return null;
+
+        return kRepository.findByUniqueAttribute(p.getUniqueAttribute())
+                .orElseGet(() -> {
+                    try {
+                        K newK = new K();
+                        newK.setUniqueAttribute(p.getUniqueAttribute());
+                        return kRepository.save(newK);
+                    } catch (DataIntegrityViolationException e) {
+                        // Concurrent insert fallback
+                        return kRepository.findByUniqueAttribute(p.getUniqueAttribute())
+                                .orElseThrow();
+                    }
+                });
+    }
+}
+
+
+---
+
+Mapper interface
+
+@Mapper(componentModel = "spring", uses = {FToHResolver.class, PToKResolver.class})
+@Transactional
+public interface DtoMapper {
+
+    @Mapping(target = "names", source = "attributes", qualifiedByName = "mapFtoH")
+    @Mapping(target = "methods", source = "methods", qualifiedByName = "resolveK")
+    D mapEToD(E e);
+}
+
+
+---
+
+How it works:
+
+When mapping attributes (List<F>), MapStruct applies mapFtoH method to each F and collects List<H>
+
+When mapping methods (List<P>), MapStruct applies resolveK method to each P, using transactional safe lookup-or-create logic
+
+The entire mapping happens inside one Spring-managed transaction (@Transactional on the mapper interface)
+
+PToKResolver.map will fail if called outside this transaction (because of Propagation.MANDATORY), keeping things safe and consistent
+
