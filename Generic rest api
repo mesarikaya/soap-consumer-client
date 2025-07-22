@@ -1,0 +1,224 @@
+
+---
+
+🔧 Updated Goals
+
+1. Use MongoDB (store payload as JsonNode or Document)
+
+
+2. Read config file path from application.properties
+
+
+3. Everything else stays the same: generic controller, dynamic endpoints, saving payload, etc.
+
+
+
+
+---
+
+🧩 Step-by-Step Breakdown
+
+1. application.properties
+
+server.port=8080
+
+# MongoDB settings
+spring.data.mongodb.uri=mongodb://localhost:27017/dynamicdb
+
+# Path to endpoint config file
+dynamic.endpoint.config.path=classpath:config/endpoints.json
+
+You can place the JSON config file inside src/main/resources/config/endpoints.json.
+
+
+---
+
+2. JSON Config Example
+
+[
+  {
+    "endpoint": "/api/saveUser",
+    "method": "POST",
+    "collection": "users"
+  },
+  {
+    "endpoint": "/api/saveOrder",
+    "method": "POST",
+    "collection": "orders"
+  }
+]
+
+> Note: Changed table → collection for Mongo terminology.
+
+
+
+
+---
+
+3. Model (No JPA)
+
+@Document(collection = "dynamic_collection")
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class DynamicPayload {
+
+    @Id
+    private String id;
+
+    private String collection;
+
+    private JsonNode payload;
+
+    private LocalDateTime createdAt = LocalDateTime.now();
+}
+
+> We're just using a generic collection for now (dynamic_collection) — alternatively, you can use MongoTemplate to dynamically write to any collection (we’ll do this below 👇).
+
+
+
+
+---
+
+4. Config Class
+
+@Data
+public class EndpointConfig {
+    private String endpoint;
+    private String method;
+    private String collection;
+}
+
+
+---
+
+5. Config Loader
+
+@Component
+public class EndpointConfigLoader {
+
+    private final List<EndpointConfig> endpoints;
+
+    public EndpointConfigLoader(@Value("${dynamic.endpoint.config.path}") String configPath) throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        InputStream is;
+
+        if (configPath.startsWith("classpath:")) {
+            String path = configPath.replace("classpath:", "");
+            is = new ClassPathResource(path).getInputStream();
+        } else {
+            is = new FileInputStream(configPath);
+        }
+
+        TypeReference<List<EndpointConfig>> typeRef = new TypeReference<>() {};
+        endpoints = mapper.readValue(is, typeRef);
+    }
+
+    public List<EndpointConfig> getEndpoints() {
+        return endpoints;
+    }
+}
+
+
+---
+
+6. Generic Controller with MongoTemplate
+
+@RestController
+public class DynamicMongoController {
+
+    private final MongoTemplate mongoTemplate;
+    private final EndpointConfigLoader configLoader;
+
+    public DynamicMongoController(MongoTemplate mongoTemplate, EndpointConfigLoader configLoader) {
+        this.mongoTemplate = mongoTemplate;
+        this.configLoader = configLoader;
+    }
+
+    @PostMapping("/**")
+    public ResponseEntity<?> handleDynamicPost(HttpServletRequest request, @RequestBody JsonNode payload) {
+        String path = request.getRequestURI();
+
+        Optional<EndpointConfig> match = configLoader.getEndpoints().stream()
+                .filter(ec -> ec.getMethod().equalsIgnoreCase("POST") && ec.getEndpoint().equals(path))
+                .findFirst();
+
+        if (match.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("No endpoint configured");
+        }
+
+        String collection = match.get().getCollection();
+
+        // Create document to insert
+        ObjectNode document = payload.deepCopy();
+        ((ObjectNode) document).put("createdAt", LocalDateTime.now().toString());
+
+        mongoTemplate.save(document, collection);
+
+        return ResponseEntity.ok("Saved to collection: " + collection);
+    }
+}
+
+
+---
+
+7. Dependencies (in pom.xml)
+
+Make sure you have these:
+
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-data-mongodb</artifactId>
+</dependency>
+
+<dependency>
+    <groupId>com.fasterxml.jackson.core</groupId>
+    <artifactId>jackson-databind</artifactId>
+</dependency>
+
+
+---
+
+🧪 Example Test Call
+
+POST to /api/saveUser
+
+{
+  "name": "Alice",
+  "email": "alice@example.com"
+}
+
+→ Will be saved to MongoDB collection users.
+
+
+---
+
+✅ Summary
+
+Part	Done?
+
+MongoDB support	✅
+Read config from .properties	✅
+Dynamic endpoints	✅
+Store payload as JSON	✅
+Scalable / extendable	✅✅✅
+
+
+
+---
+
+🚀 What's Next?
+
+Want to expand this into a full product idea? Here are some ideas:
+
+Add GET support for dynamic routes.
+
+Add JSON Schema validation per endpoint.
+
+Add versioning to configs.
+
+Export this to GitHub as a “low-code API backend engine” — would be a 🔥 blog/YouTube topic.
+
+
+Would you like me to scaffold this as a GitHub-ready Spring Boot project for you?
+
